@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Graduation Gallery</title>
+  <link rel="stylesheet" href="/gallery.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
+</head>
+<body>
+
+<!-- Hero Header -->
+<header class="hero">
+  <div class="hero-bg"></div>
+  <div class="confetti-container" id="confetti"></div>
+  <div class="hero-content">
+    <div class="cap-icon">🎓</div>
+    <h1 id="graduate-name">Loading...</h1>
+    <p class="hero-sub">Congratulations on your graduation!</p>
+    <div class="hero-divider"></div>
+  </div>
+</header>
+
+<!-- Gallery -->
+<main>
+  <div id="gallery-container">
+    <div class="loading-state">
+      <div class="spinner"></div>
+      <p>Loading memories...</p>
+    </div>
+  </div>
+</main>
+
+<!-- Lightbox -->
+<div class="lightbox" id="lightbox">
+  <button class="lb-close" id="lb-close">✕</button>
+  <button class="lb-nav lb-prev" id="lb-prev">&#8249;</button>
+  <div class="lb-img-wrap">
+    <img id="lightbox-img" src="" alt="Photo" />
+  </div>
+  <button class="lb-nav lb-next" id="lb-next">&#8250;</button>
+</div>
+
+<script>
+  const slug = location.pathname.split('/gallery/')[1];
+  let allPhotos = [];
+  let currentLightboxIndex = 0;
+
+  // ── Confetti ──────────────────────────────────────────────
+  function spawnConfetti() {
+    const container = document.getElementById('confetti');
+    const colors = ['#f9ca24','#f0932b','#6ab04c','#e056fd','#22a6b3','#eb4d4b','#badc58'];
+    for (let i = 0; i < 60; i++) {
+      const el = document.createElement('div');
+      el.className = 'confetti-piece';
+      el.style.cssText = `
+        left:${Math.random()*100}%;
+        background:${colors[Math.floor(Math.random()*colors.length)]};
+        animation-delay:${Math.random()*3}s;
+        animation-duration:${2.5 + Math.random()*2}s;
+        width:${6+Math.random()*6}px;
+        height:${6+Math.random()*6}px;
+        border-radius:${Math.random()>0.5?'50%':'2px'};
+      `;
+      container.appendChild(el);
+    }
+  }
+
+  // ── Load Gallery ──────────────────────────────────────────
+  async function loadGallery() {
+    const res = await fetch(`/api/gallery/${slug}`);
+    if (!res.ok) {
+      document.getElementById('gallery-container').innerHTML =
+        '<div class="empty-state"><span>📭</span><p>Gallery not found.</p></div>';
+      return;
+    }
+    const data = await res.json();
+    allPhotos = data.photos;
+
+    document.title = `${data.user.name} — Graduation`;
+    document.getElementById('graduate-name').textContent = data.user.name;
+    spawnConfetti();
+
+    if (!data.photos.length) {
+      document.getElementById('gallery-container').innerHTML =
+        '<div class="empty-state"><span>🖼️</span><p>No photos yet. Check back soon!</p></div>';
+      return;
+    }
+
+    const grid = document.createElement('div');
+    grid.className = 'gallery-grid';
+    data.photos.forEach((photo, i) => {
+      const card = buildCard(photo, i);
+      grid.appendChild(card);
+    });
+
+    document.getElementById('gallery-container').innerHTML = '';
+    document.getElementById('gallery-container').appendChild(grid);
+
+    // Animate cards in
+    requestAnimationFrame(() => {
+      document.querySelectorAll('.photo-card').forEach((card, i) => {
+        setTimeout(() => card.classList.add('visible'), i * 80);
+      });
+    });
+  }
+
+  // ── Build Card ────────────────────────────────────────────
+  function buildCard(photo, index) {
+    const id = photo._id;
+    const card = document.createElement('div');
+    card.className = 'photo-card';
+    card.dataset.index = index;
+
+    card.innerHTML = `
+      <div class="card-img-wrap">
+        <img src="/uploads/${photo.filename}" alt="${escHtml(photo.caption || 'Graduation photo')}" loading="lazy" />
+        <div class="img-overlay">
+          <button class="view-btn" onclick="openLightbox(${index})">🔍 View</button>
+        </div>
+      </div>
+      ${photo.caption ? `<p class="photo-caption">${escHtml(photo.caption)}</p>` : ''}
+      <div class="card-actions">
+        <button class="like-btn" id="like-btn-${id}" onclick="toggleLike('${id}')">
+          <span class="heart">🤍</span>
+          <span class="like-count" id="like-count-${id}">${photo.likes}</span>
+        </button>
+        <span class="comment-count">💬 ${photo.comments.length}</span>
+      </div>
+      <div class="comments-section">
+        <div class="comments-list" id="comments-${id}">
+          ${photo.comments.map(c => buildCommentHTML(c)).join('')}
+        </div>
+        <div class="comment-form">
+          <input type="text" id="cname-${id}" placeholder="Your name" maxlength="50" />
+          <textarea id="cmsg-${id}" rows="2" placeholder="Leave a message..." maxlength="300"></textarea>
+          <button class="post-btn" onclick="submitComment('${id}')">Post ✉️</button>
+        </div>
+      </div>
+    `;
+    return card;
+  }
+
+  function buildCommentHTML(c) {
+    return `<div class="comment-item">
+      <strong>${escHtml(c.name)}</strong>
+      <span>${escHtml(c.message)}</span>
+    </div>`;
+  }
+
+  // ── Like ──────────────────────────────────────────────────
+  async function toggleLike(photoId) {
+    const btn = document.getElementById(`like-btn-${photoId}`);
+    const countEl = document.getElementById(`like-count-${photoId}`);
+    const heart = btn.querySelector('.heart');
+
+    btn.classList.add('pop');
+    setTimeout(() => btn.classList.remove('pop'), 300);
+
+    const res = await fetch(`/api/photos/${photoId}/like`, { method: 'POST' });
+    const data = await res.json();
+    countEl.textContent = data.likes;
+
+    const liked = btn.dataset.liked === 'true';
+    btn.dataset.liked = !liked;
+    heart.textContent = !liked ? '❤️' : '🤍';
+    btn.classList.toggle('liked', !liked);
+  }
+
+  // ── Comment ───────────────────────────────────────────────
+  async function submitComment(photoId) {
+    const nameEl = document.getElementById(`cname-${photoId}`);
+    const msgEl = document.getElementById(`cmsg-${photoId}`);
+    const name = nameEl.value.trim();
+    const message = msgEl.value.trim();
+    if (!name || !message) {
+      msgEl.classList.add('shake');
+      setTimeout(() => msgEl.classList.remove('shake'), 400);
+      return;
+    }
+
+    const res = await fetch(`/api/photos/${photoId}/comments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, message })
+    });
+    if (res.ok) {
+      const c = await res.json();
+      const list = document.getElementById(`comments-${photoId}`);
+      const div = document.createElement('div');
+      div.className = 'comment-item new';
+      div.innerHTML = `<strong>${escHtml(c.name)}</strong><span>${escHtml(c.message)}</span>`;
+      list.appendChild(div);
+      nameEl.value = '';
+      msgEl.value = '';
+      // update count
+      const card = list.closest('.photo-card');
+      const countEl = card.querySelector('.comment-count');
+      const current = parseInt(countEl.textContent.replace(/\D/g,'')) || 0;
+      countEl.textContent = `💬 ${current + 1}`;
+    }
+  }
+
+  // ── Lightbox ──────────────────────────────────────────────
+  function openLightbox(index) {
+    currentLightboxIndex = index;
+    const photo = allPhotos[index];
+    document.getElementById('lightbox-img').src = `/uploads/${photo.filename}`;
+    document.getElementById('lightbox').classList.add('active');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeLightbox() {
+    document.getElementById('lightbox').classList.remove('active');
+    document.body.style.overflow = '';
+  }
+
+  document.getElementById('lb-close').onclick = closeLightbox;
+  document.getElementById('lb-prev').onclick = () => {
+    currentLightboxIndex = (currentLightboxIndex - 1 + allPhotos.length) % allPhotos.length;
+    document.getElementById('lightbox-img').src = `/uploads/${allPhotos[currentLightboxIndex].filename}`;
+  };
+  document.getElementById('lb-next').onclick = () => {
+    currentLightboxIndex = (currentLightboxIndex + 1) % allPhotos.length;
+    document.getElementById('lightbox-img').src = `/uploads/${allPhotos[currentLightboxIndex].filename}`;
+  };
+  document.getElementById('lightbox').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeLightbox();
+  });
+  document.addEventListener('keydown', e => {
+    if (!document.getElementById('lightbox').classList.contains('active')) return;
+    if (e.key === 'Escape') closeLightbox();
+    if (e.key === 'ArrowLeft') document.getElementById('lb-prev').click();
+    if (e.key === 'ArrowRight') document.getElementById('lb-next').click();
+  });
+
+  function escHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  loadGallery();
+</script>
+</body>
+</html>

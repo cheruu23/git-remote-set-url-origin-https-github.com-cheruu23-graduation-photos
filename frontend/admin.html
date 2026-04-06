@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin — Graduation Photos</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+
+<!-- Login Screen -->
+<div id="login-screen">
+  <div class="login-box">
+    <h2>🎓 Admin Login</h2>
+    <div id="login-msg"></div>
+    <div class="form-group">
+      <label>Username</label>
+      <input type="text" id="login-user" value="admin" />
+    </div>
+    <div class="form-group">
+      <label>Password</label>
+      <input type="password" id="login-pass" placeholder="Password" />
+    </div>
+    <button class="btn btn-primary" style="width:100%" onclick="doLogin()">Login</button>
+  </div>
+</div>
+
+<!-- Admin Dashboard -->
+<div id="admin-screen" style="display:none">
+  <nav class="admin-nav">
+    <h2>🎓 Graduation Admin</h2>
+    <button class="btn btn-sm" style="background:#e74c3c;color:white" onclick="doLogout()">Logout</button>
+  </nav>
+
+  <div class="admin-container">
+
+    <!-- Add User -->
+    <div class="card">
+      <h3>Register Graduate</h3>
+      <div id="add-user-msg"></div>
+      <div style="display:flex;gap:0.8rem;flex-wrap:wrap">
+        <input type="text" id="new-user-name" placeholder="Graduate's full name" style="flex:1;padding:0.5rem 0.7rem;border:1px solid #ddd;border-radius:6px;font-size:0.95rem" />
+        <button class="btn btn-primary" onclick="addUser()">Add Graduate</button>
+      </div>
+    </div>
+
+    <!-- Users List -->
+    <div class="card">
+      <h3>Graduates</h3>
+      <ul class="user-list" id="user-list">
+        <li class="empty">Loading...</li>
+      </ul>
+    </div>
+
+  </div>
+</div>
+
+<!-- Upload Modal -->
+<div class="qr-modal" id="upload-modal">
+  <div class="qr-box" style="max-width:480px;width:95%">
+    <h3>Upload Photos for <span id="upload-user-name"></span></h3>
+    <div id="upload-msg"></div>
+    <div class="upload-area" onclick="document.getElementById('file-input').click()">
+      Click to select photos (multiple allowed)
+    </div>
+    <input type="file" id="file-input" multiple accept="image/*" style="display:none" onchange="previewFiles()" />
+    <div class="photo-thumbs" id="preview-thumbs"></div>
+    <div style="display:flex;gap:0.5rem;margin-top:1rem;justify-content:flex-end">
+      <button class="btn" style="background:#ccc" onclick="closeUpload()">Cancel</button>
+      <button class="btn btn-primary" onclick="doUpload()">Upload</button>
+    </div>
+  </div>
+</div>
+
+<!-- QR Modal -->
+<div class="qr-modal" id="qr-modal">
+  <div class="qr-box">
+    <h3 id="qr-user-name"></h3>
+    <img id="qr-img" src="" alt="QR Code" />
+    <p class="qr-url" id="qr-url"></p>
+    <div style="display:flex;gap:0.5rem;justify-content:center;flex-wrap:wrap">
+      <button class="btn btn-primary" onclick="downloadQR()">Download QR</button>
+      <button class="btn" style="background:#ccc" onclick="closeQR()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Photos Modal -->
+<div class="qr-modal" id="photos-modal">
+  <div class="qr-box" style="max-width:600px;width:95%">
+    <h3>Photos — <span id="photos-modal-name"></span></h3>
+    <div class="photo-thumbs" id="modal-photo-thumbs" style="justify-content:center"></div>
+    <button class="btn" style="background:#ccc;margin-top:1rem" onclick="closePhotos()">Close</button>
+  </div>
+</div>
+
+<script>
+  let currentUploadUserId = null;
+  let currentUploadUserName = '';
+  let selectedFiles = [];
+
+  // ── Auth ──────────────────────────────────────────────────
+  async function checkAuth() {
+    const res = await fetch('/api/admin/me');
+    const data = await res.json();
+    if (data.isAdmin) showDashboard();
+  }
+
+  async function doLogin() {
+    const username = document.getElementById('login-user').value;
+    const password = document.getElementById('login-pass').value;
+    const res = await fetch('/api/admin/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    if (res.ok) {
+      showDashboard();
+    } else {
+      showMsg('login-msg', 'Invalid credentials', 'error');
+    }
+  }
+
+  async function doLogout() {
+    await fetch('/api/admin/logout', { method: 'POST' });
+    location.reload();
+  }
+
+  function showDashboard() {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('admin-screen').style.display = 'block';
+    loadUsers();
+  }
+
+  // ── Users ─────────────────────────────────────────────────
+  async function loadUsers() {
+    const res = await fetch('/api/admin/users');
+    const users = await res.json();
+    const list = document.getElementById('user-list');
+
+    if (!users.length) {
+      list.innerHTML = '<li class="empty">No graduates yet. Add one above.</li>';
+      return;
+    }
+
+    list.innerHTML = '';
+    users.forEach(u => {
+      const li = document.createElement('li');
+      li.className = 'user-item';
+      const uid = u._id;
+      li.innerHTML = `
+        <span class="user-name">${escHtml(u.name)}</span>
+        <div style="display:flex;gap:0.4rem;flex-wrap:wrap">
+          <button class="btn btn-sm btn-primary" onclick="openUpload('${uid}', '${escHtml(u.name)}')">📷 Photos</button>
+          <button class="btn btn-sm btn-success" onclick="showQR('${uid}', '${escHtml(u.name)}')">📱 QR Code</button>
+          <button class="btn btn-sm" style="background:#8e44ad;color:white" onclick="viewPhotos('${uid}', '${escHtml(u.name)}')">🖼 View</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteUser('${uid}')">🗑 Delete</button>
+        </div>
+      `;
+      list.appendChild(li);
+    });
+  }
+
+  async function addUser() {
+    const name = document.getElementById('new-user-name').value.trim();
+    if (!name) return showMsg('add-user-msg', 'Please enter a name', 'error');
+
+    const res = await fetch('/api/admin/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name })
+    });
+    if (res.ok) {
+      document.getElementById('new-user-name').value = '';
+      showMsg('add-user-msg', 'Graduate added!', 'success');
+      loadUsers();
+    } else {
+      const err = await res.json();
+      showMsg('add-user-msg', err.error, 'error');
+    }
+  }
+
+  async function deleteUser(id) {
+    if (!confirm('Delete this graduate and all their photos?')) return;
+    await fetch(`/api/admin/users/${id}`, { method: 'DELETE' });
+    loadUsers();
+  }
+
+  // ── Upload ────────────────────────────────────────────────
+  function openUpload(userId, userName) {
+    currentUploadUserId = userId;
+    currentUploadUserName = userName;
+    selectedFiles = [];
+    document.getElementById('upload-user-name').textContent = userName;
+    document.getElementById('preview-thumbs').innerHTML = '';
+    document.getElementById('file-input').value = '';
+    document.getElementById('upload-msg').innerHTML = '';
+    document.getElementById('upload-modal').classList.add('active');
+  }
+
+  function closeUpload() {
+    document.getElementById('upload-modal').classList.remove('active');
+  }
+
+  function previewFiles() {
+    selectedFiles = Array.from(document.getElementById('file-input').files);
+    const thumbs = document.getElementById('preview-thumbs');
+    thumbs.innerHTML = '';
+    selectedFiles.forEach((file, i) => {
+      const reader = new FileReader();
+      reader.onload = e => {
+        const div = document.createElement('div');
+        div.className = 'photo-thumb';
+        div.innerHTML = `<img src="${e.target.result}" alt="preview" />`;
+        thumbs.appendChild(div);
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function doUpload() {
+    if (!selectedFiles.length) return showMsg('upload-msg', 'Select at least one photo', 'error');
+    if (!currentUploadUserId) return showMsg('upload-msg', 'No graduate selected', 'error');
+    const formData = new FormData();
+    selectedFiles.forEach(f => formData.append('photos', f));
+
+    const res = await fetch(`/api/admin/users/${currentUploadUserId}/photos`, {
+      method: 'POST',
+      body: formData
+    });
+    if (res.ok) {
+      showMsg('upload-msg', 'Photos uploaded!', 'success');
+      selectedFiles = [];
+      document.getElementById('preview-thumbs').innerHTML = '';
+      document.getElementById('file-input').value = '';
+    } else {
+      const err = await res.json().catch(() => ({}));
+      showMsg('upload-msg', err.error || 'Upload failed', 'error');
+    }
+  }
+
+  // ── QR Code ───────────────────────────────────────────────
+  async function showQR(userId, userName) {
+    const res = await fetch(`/api/admin/users/${userId}/qr`);
+    const data = await res.json();
+    document.getElementById('qr-user-name').textContent = userName;
+    document.getElementById('qr-img').src = data.qr;
+    document.getElementById('qr-url').textContent = data.url;
+    document.getElementById('qr-modal').classList.add('active');
+  }
+
+  function closeQR() {
+    document.getElementById('qr-modal').classList.remove('active');
+  }
+
+  function downloadQR() {
+    const img = document.getElementById('qr-img').src;
+    const a = document.createElement('a');
+    a.href = img;
+    a.download = `qr-${document.getElementById('qr-user-name').textContent}.png`;
+    a.click();
+  }
+
+  // ── View Photos ───────────────────────────────────────────
+  async function viewPhotos(userId, userName) {
+    const res = await fetch(`/api/gallery/${await getUserSlug(userId)}`);
+    if (!res.ok) return alert('Could not load photos');
+    const data = await res.json();
+
+    document.getElementById('photos-modal-name').textContent = userName;
+    const thumbs = document.getElementById('modal-photo-thumbs');
+    thumbs.innerHTML = '';
+
+    if (!data.photos.length) {
+      thumbs.innerHTML = '<p style="color:#aaa">No photos uploaded yet.</p>';
+    } else {
+      data.photos.forEach(p => {
+        const div = document.createElement('div');
+        div.className = 'photo-thumb';
+        div.innerHTML = `
+          <img src="/uploads/${p.filename}" alt="photo" style="width:100px;height:100px" />
+          <button class="del-photo" onclick="deletePhoto('${p._id}', '${userId}', '${escHtml(userName)}')">✕</button>
+        `;
+        thumbs.appendChild(div);
+      });
+    }
+    document.getElementById('photos-modal').classList.add('active');
+  }
+
+  async function getUserSlug(userId) {
+    const res = await fetch('/api/admin/users');
+    const users = await res.json();
+    return users.find(u => u._id === userId)?.slug;
+  }
+
+  async function deletePhoto(photoId, userId, userName) {
+    if (!confirm('Delete this photo?')) return;
+    await fetch(`/api/admin/photos/${photoId}`, { method: 'DELETE' });
+    viewPhotos(userId, userName);
+  }
+
+  function closePhotos() {
+    document.getElementById('photos-modal').classList.remove('active');
+  }
+
+  // ── Helpers ───────────────────────────────────────────────
+  function showMsg(elId, text, type) {
+    const el = document.getElementById(elId);
+    el.innerHTML = `<div class="msg msg-${type}">${escHtml(text)}</div>`;
+    setTimeout(() => el.innerHTML = '', 3000);
+  }
+
+  function escHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  document.getElementById('login-pass').addEventListener('keydown', e => {
+    if (e.key === 'Enter') doLogin();
+  });
+
+  checkAuth();
+</script>
+</body>
+</html>
