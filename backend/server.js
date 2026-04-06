@@ -3,6 +3,7 @@ const cookieParser = require('cookie-parser');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const QRCode = require('qrcode');
+const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
 const { connect, Admin, User, Photo, Like, Comment } = require('./db');
@@ -15,7 +16,6 @@ app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// ── Auth middleware ───────────────────────────────────────────
 function requireAdmin(req, res, next) {
   const token = req.cookies?.admin_token || req.headers.authorization?.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'Unauthorized' });
@@ -23,7 +23,6 @@ function requireAdmin(req, res, next) {
   catch { res.status(401).json({ error: 'Unauthorized' }); }
 }
 
-// ── DB connect ────────────────────────────────────────────────
 let dbReady = false;
 async function ensureDB() {
   if (!dbReady) {
@@ -63,19 +62,19 @@ app.get('/api/admin/me', (req, res) => {
   catch { res.json({ isAdmin: false }); }
 });
 
-// ── Cloudinary signature (browser uploads directly) ───────────
+// ── Cloudinary signature ──────────────────────────────────────
 app.get('/api/cloudinary/signature', requireAdmin, (req, res) => {
   const timestamp = Math.round(Date.now() / 1000);
-  const signature = cloudinary.utils.api_sign_request(
-    { timestamp, folder: 'graduation-photos' },
-    process.env.CLOUDINARY_API_SECRET
-  );
+  const folder = 'graduation-photos';
+  // Cloudinary requires params sorted alphabetically + secret appended
+  const toSign = `folder=${folder}&timestamp=${timestamp}${process.env.CLOUDINARY_API_SECRET}`;
+  const signature = crypto.createHash('sha1').update(toSign).digest('hex');
   res.json({
     timestamp,
     signature,
     cloudName: process.env.CLOUDINARY_CLOUD_NAME,
     apiKey: process.env.CLOUDINARY_API_KEY,
-    folder: 'graduation-photos'
+    folder
   });
 });
 
@@ -107,20 +106,13 @@ app.delete('/api/admin/users/:id', requireAdmin, async (req, res) => {
   res.json({ success: true });
 });
 
-// ── Save photo URL after direct Cloudinary upload ─────────────
+// ── Save photo after direct Cloudinary upload ─────────────────
 app.post('/api/admin/users/:id/photos', requireAdmin, async (req, res) => {
   const user = await User.findById(req.params.id);
   if (!user) return res.status(404).json({ error: 'User not found' });
-
   const { url, cloudinaryId, caption } = req.body;
   if (!url) return res.status(400).json({ error: 'url required' });
-
-  const photo = await Photo.create({
-    userId: req.params.id,
-    url,
-    cloudinaryId: cloudinaryId || '',
-    caption: caption || ''
-  });
+  const photo = await Photo.create({ userId: req.params.id, url, cloudinaryId: cloudinaryId || '', caption: caption || '' });
   res.json(photo);
 });
 
