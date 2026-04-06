@@ -132,7 +132,7 @@
     location.reload();
   }
 
-  // Add auth header to all fetch calls
+  // Add auth header only to our own API calls
   const _fetch = window.fetch;
   window.fetch = (url, opts = {}) => {
     const token = localStorage.getItem('admin_token');
@@ -260,9 +260,7 @@
       fd.append('expire', auth.expire);
       fd.append('token', auth.token);
 
-      const upRes = await fetch(`${auth.urlEndpoint}/api/v1/files/upload`
-        .replace(/\/+api/, '/api')
-        .replace(auth.urlEndpoint, 'https://upload.imagekit.io/api/v1/files/upload'), {
+      const upRes = await _fetch('https://upload.imagekit.io/api/v1/files/upload', {
         method: 'POST',
         body: fd
       });
