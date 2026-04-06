@@ -11,11 +11,7 @@ const { getImageKit } = require('./imagekit');
 
 const app = express();
 const JWT_SECRET = process.env.JWT_SECRET || 'grad-jwt-secret-2024';
-// Memory storage — no disk needed, passes buffer to ImageKit
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
-
-const app = express();
-const JWT_SECRET = process.env.JWT_SECRET || 'grad-jwt-secret-2024';
 
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
