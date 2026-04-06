@@ -257,7 +257,7 @@
       document.getElementById('file-input').value = '';
     } else {
       const err = await res.json().catch(() => ({}));
-      showMsg('upload-msg', `Error ${res.status}: ${err.error || 'Upload failed'}`, 'error');
+      showMsg('upload-msg', err.error || 'Upload failed', 'error');
     }
   }
 
