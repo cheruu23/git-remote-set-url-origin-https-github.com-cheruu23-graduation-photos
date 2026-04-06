@@ -39,6 +39,13 @@ app.use(async (req, res, next) => {
 });
 
 // ── Admin Auth ────────────────────────────────────────────────
+// Temporary reset route - remove after first use
+app.get('/api/admin/reset', async (req, res) => {
+  await Admin.deleteMany({});
+  await Admin.create({ username: 'admin', password: bcrypt.hashSync('admin123', 10) });
+  res.json({ success: true, message: 'Admin reset to admin/admin123' });
+});
+
 app.post('/api/admin/login', async (req, res) => {
   const { username, password } = req.body;
   const admin = await Admin.findOne({ username });
