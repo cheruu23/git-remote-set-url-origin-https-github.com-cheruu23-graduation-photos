@@ -1,19 +1,17 @@
 const express = require('express');
 const cookieParser = require('cookie-parser');
-const multer = require('multer');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const QRCode = require('qrcode');
 const path = require('path');
+const fs = require('fs');
 const { connect, Admin, User, Photo, Like, Comment } = require('./db');
-const { cloudinary, storage } = require('./cloudinary');
+const { cloudinary } = require('./cloudinary');
 
 const app = express();
 const JWT_SECRET = process.env.JWT_SECRET || 'grad-jwt-secret-2024';
 
-const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } });
-
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
@@ -21,29 +19,25 @@ app.use(cookieParser());
 function requireAdmin(req, res, next) {
   const token = req.cookies?.admin_token || req.headers.authorization?.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'Unauthorized' });
-  try {
-    jwt.verify(token, JWT_SECRET);
-    next();
-  } catch {
-    res.status(401).json({ error: 'Unauthorized' });
-  }
+  try { jwt.verify(token, JWT_SECRET); next(); }
+  catch { res.status(401).json({ error: 'Unauthorized' }); }
 }
 
-// ── DB connect on each cold start ─────────────────────────────
+// ── DB connect ────────────────────────────────────────────────
 let dbReady = false;
 async function ensureDB() {
   if (!dbReady) {
     await connect();
     const existing = await Admin.findOne({ username: 'admin' });
-    if (!existing) {
+    if (!existing)
       await Admin.create({ username: 'admin', password: bcrypt.hashSync('admin123', 10) });
-    }
     dbReady = true;
   }
 }
 
 app.use(async (req, res, next) => {
-  try { await ensureDB(); next(); } catch (e) { res.status(500).json({ error: 'DB error' }); }
+  try { await ensureDB(); next(); }
+  catch (e) { res.status(500).json({ error: 'DB error: ' + e.message }); }
 });
 
 // ── Admin Auth ────────────────────────────────────────────────
@@ -52,10 +46,9 @@ app.post('/api/admin/login', async (req, res) => {
   const admin = await Admin.findOne({ username });
   if (!admin || !bcrypt.compareSync(password, admin.password))
     return res.status(401).json({ error: 'Invalid credentials' });
-
   const token = jwt.sign({ admin: true }, JWT_SECRET, { expiresIn: '24h' });
-  res.cookie('admin_token', token, { httpOnly: true, sameSite: 'lax', maxAge: 86400000 });
-  res.json({ success: true });
+  res.cookie('admin_token', token, { httpOnly: true, sameSite: 'none', secure: true, maxAge: 86400000 });
+  res.json({ success: true, token });
 });
 
 app.post('/api/admin/logout', (req, res) => {
@@ -64,10 +57,26 @@ app.post('/api/admin/logout', (req, res) => {
 });
 
 app.get('/api/admin/me', (req, res) => {
-  const token = req.cookies?.admin_token;
+  const token = req.cookies?.admin_token || req.headers.authorization?.split(' ')[1];
   if (!token) return res.json({ isAdmin: false });
   try { jwt.verify(token, JWT_SECRET); res.json({ isAdmin: true }); }
   catch { res.json({ isAdmin: false }); }
+});
+
+// ── Cloudinary signature (browser uploads directly) ───────────
+app.get('/api/cloudinary/signature', requireAdmin, (req, res) => {
+  const timestamp = Math.round(Date.now() / 1000);
+  const signature = cloudinary.utils.api_sign_request(
+    { timestamp, folder: 'graduation-photos' },
+    process.env.CLOUDINARY_API_SECRET
+  );
+  res.json({
+    timestamp,
+    signature,
+    cloudName: process.env.CLOUDINARY_CLOUD_NAME,
+    apiKey: process.env.CLOUDINARY_API_KEY,
+    folder: 'graduation-photos'
+  });
 });
 
 // ── Users ─────────────────────────────────────────────────────
@@ -89,7 +98,7 @@ app.post('/api/admin/users', requireAdmin, async (req, res) => {
 app.delete('/api/admin/users/:id', requireAdmin, async (req, res) => {
   const photos = await Photo.find({ userId: req.params.id });
   for (const p of photos) {
-    if (p.cloudinaryId) await cloudinary.uploader.destroy(p.cloudinaryId);
+    if (p.cloudinaryId) await cloudinary.uploader.destroy(p.cloudinaryId).catch(() => {});
     await Like.deleteMany({ photoId: p._id });
     await Comment.deleteMany({ photoId: p._id });
   }
@@ -98,28 +107,27 @@ app.delete('/api/admin/users/:id', requireAdmin, async (req, res) => {
   res.json({ success: true });
 });
 
-// ── Photos ────────────────────────────────────────────────────
-app.post('/api/admin/users/:id/photos', requireAdmin, upload.array('photos', 50), async (req, res) => {
+// ── Save photo URL after direct Cloudinary upload ─────────────
+app.post('/api/admin/users/:id/photos', requireAdmin, async (req, res) => {
   const user = await User.findById(req.params.id);
   if (!user) return res.status(404).json({ error: 'User not found' });
 
-  const inserted = [];
-  for (const file of req.files) {
-    const photo = await Photo.create({
-      userId: req.params.id,
-      url: file.path,
-      cloudinaryId: file.filename,
-      caption: req.body.caption || ''
-    });
-    inserted.push(photo);
-  }
-  res.json(inserted);
+  const { url, cloudinaryId, caption } = req.body;
+  if (!url) return res.status(400).json({ error: 'url required' });
+
+  const photo = await Photo.create({
+    userId: req.params.id,
+    url,
+    cloudinaryId: cloudinaryId || '',
+    caption: caption || ''
+  });
+  res.json(photo);
 });
 
 app.delete('/api/admin/photos/:id', requireAdmin, async (req, res) => {
   const photo = await Photo.findById(req.params.id);
   if (photo) {
-    if (photo.cloudinaryId) await cloudinary.uploader.destroy(photo.cloudinaryId);
+    if (photo.cloudinaryId) await cloudinary.uploader.destroy(photo.cloudinaryId).catch(() => {});
     await Like.deleteMany({ photoId: photo._id });
     await Comment.deleteMany({ photoId: photo._id });
     await photo.deleteOne();
@@ -141,7 +149,6 @@ app.get('/api/admin/users/:id/qr', requireAdmin, async (req, res) => {
 app.get('/api/gallery/:slug', async (req, res) => {
   const user = await User.findOne({ slug: req.params.slug });
   if (!user) return res.status(404).json({ error: 'Not found' });
-
   const photos = await Photo.find({ userId: user._id }).sort({ createdAt: 1 });
   const photosWithData = await Promise.all(photos.map(async p => {
     const likes = await Like.countDocuments({ photoId: p._id });
@@ -169,20 +176,11 @@ app.post('/api/photos/:id/comments', async (req, res) => {
   res.json(comment);
 });
 
-// ── SPA fallback ──────────────────────────────────────────────
+// ── Gallery SPA ───────────────────────────────────────────────
 app.get('/gallery/:slug', (req, res) => {
-  const fs = require('fs');
   const html = fs.readFileSync(path.join(__dirname, '../frontend/index.html'), 'utf8');
   res.setHeader('Content-Type', 'text/html');
   res.send(html);
 });
-
-// ── Local dev only ────────────────────────────────────────────
-if (process.env.NODE_ENV !== 'production') {
-  const PORT = process.env.PORT || 3000;
-  ensureDB().then(() => {
-    app.listen(PORT, () => console.log(`http://localhost:${PORT}`));
-  });
-}
 
 module.exports = app;

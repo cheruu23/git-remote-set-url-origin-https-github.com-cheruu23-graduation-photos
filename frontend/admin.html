@@ -101,9 +101,12 @@
 
   // ── Auth ──────────────────────────────────────────────────
   async function checkAuth() {
+    const token = localStorage.getItem('admin_token');
+    if (!token) return;
     const res = await fetch('/api/admin/me');
     const data = await res.json();
     if (data.isAdmin) showDashboard();
+    else localStorage.removeItem('admin_token');
   }
 
   async function doLogin() {
@@ -115,6 +118,8 @@
       body: JSON.stringify({ username, password })
     });
     if (res.ok) {
+      const data = await res.json();
+      if (data.token) localStorage.setItem('admin_token', data.token);
       showDashboard();
     } else {
       showMsg('login-msg', 'Invalid credentials', 'error');
@@ -122,9 +127,20 @@
   }
 
   async function doLogout() {
+    localStorage.removeItem('admin_token');
     await fetch('/api/admin/logout', { method: 'POST' });
     location.reload();
   }
+
+  // Add auth header to all fetch calls
+  const _fetch = window.fetch;
+  window.fetch = (url, opts = {}) => {
+    const token = localStorage.getItem('admin_token');
+    if (token && typeof url === 'string' && url.startsWith('/api/')) {
+      opts.headers = { ...(opts.headers || {}), 'Authorization': `Bearer ${token}` };
+    }
+    return _fetch(url, opts);
+  };
 
   function showDashboard() {
     document.getElementById('login-screen').style.display = 'none';
@@ -221,22 +237,46 @@
   async function doUpload() {
     if (!selectedFiles.length) return showMsg('upload-msg', 'Select at least one photo', 'error');
     if (!currentUploadUserId) return showMsg('upload-msg', 'No graduate selected', 'error');
-    const formData = new FormData();
-    selectedFiles.forEach(f => formData.append('photos', f));
 
-    const res = await fetch(`/api/admin/users/${currentUploadUserId}/photos`, {
-      method: 'POST',
-      body: formData
-    });
-    if (res.ok) {
-      showMsg('upload-msg', 'Photos uploaded!', 'success');
-      selectedFiles = [];
-      document.getElementById('preview-thumbs').innerHTML = '';
-      document.getElementById('file-input').value = '';
-    } else {
-      const err = await res.json().catch(() => ({}));
-      showMsg('upload-msg', err.error || 'Upload failed', 'error');
+    showMsg('upload-msg', `Uploading 0 / ${selectedFiles.length}...`, 'success');
+
+    // Get Cloudinary signature from server
+    const sigRes = await fetch('/api/cloudinary/signature');
+    if (!sigRes.ok) return showMsg('upload-msg', 'Could not get upload signature', 'error');
+    const sig = await sigRes.json();
+
+    let done = 0;
+    for (const file of selectedFiles) {
+      // Upload directly to Cloudinary
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('api_key', sig.apiKey);
+      fd.append('timestamp', sig.timestamp);
+      fd.append('signature', sig.signature);
+      fd.append('folder', sig.folder);
+
+      const upRes = await fetch(`https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload`, {
+        method: 'POST',
+        body: fd
+      });
+      if (!upRes.ok) { showMsg('upload-msg', `Failed on file ${file.name}`, 'error'); continue; }
+      const upData = await upRes.json();
+
+      // Save URL to our DB
+      await fetch(`/api/admin/users/${currentUploadUserId}/photos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: upData.secure_url, cloudinaryId: upData.public_id })
+      });
+
+      done++;
+      showMsg('upload-msg', `Uploading ${done} / ${selectedFiles.length}...`, 'success');
     }
+
+    showMsg('upload-msg', `${done} photo(s) uploaded!`, 'success');
+    selectedFiles = [];
+    document.getElementById('preview-thumbs').innerHTML = '';
+    document.getElementById('file-input').value = '';
   }
 
   // ── QR Code ───────────────────────────────────────────────
