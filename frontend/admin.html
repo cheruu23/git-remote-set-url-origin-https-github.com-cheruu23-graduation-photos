@@ -132,12 +132,14 @@
     location.reload();
   }
 
-  // Add auth header only to our own API calls
+  // Add auth header only to our own API calls, never touch Content-Type
   const _fetch = window.fetch;
   window.fetch = (url, opts = {}) => {
     const token = localStorage.getItem('admin_token');
     if (token && typeof url === 'string' && url.startsWith('/api/')) {
-      opts.headers = { ...(opts.headers || {}), 'Authorization': `Bearer ${token}` };
+      const headers = new Headers(opts.headers || {});
+      headers.set('Authorization', `Bearer ${token}`);
+      opts.headers = headers;
     }
     return _fetch(url, opts);
   };
@@ -255,7 +257,7 @@
       document.getElementById('file-input').value = '';
     } else {
       const err = await res.json().catch(() => ({}));
-      showMsg('upload-msg', err.error || 'Upload failed', 'error');
+      showMsg('upload-msg', `Error ${res.status}: ${err.error || 'Upload failed'}`, 'error');
     }
   }
 
