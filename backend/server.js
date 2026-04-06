@@ -3,11 +3,10 @@ const cookieParser = require('cookie-parser');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const QRCode = require('qrcode');
-const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
 const { connect, Admin, User, Photo, Like, Comment } = require('./db');
-const { cloudinary } = require('./cloudinary');
+const imagekit = require('./imagekit');
 
 const app = express();
 const JWT_SECRET = process.env.JWT_SECRET || 'grad-jwt-secret-2024';
@@ -62,19 +61,13 @@ app.get('/api/admin/me', (req, res) => {
   catch { res.json({ isAdmin: false }); }
 });
 
-// ── Cloudinary signature ──────────────────────────────────────
-app.get('/api/cloudinary/signature', requireAdmin, (req, res) => {
-  const timestamp = Math.round(Date.now() / 1000);
-  const folder = 'graduation-photos';
-  // Cloudinary requires params sorted alphabetically + secret appended
-  const toSign = `folder=${folder}&timestamp=${timestamp}${process.env.CLOUDINARY_API_SECRET}`;
-  const signature = crypto.createHash('sha1').update(toSign).digest('hex');
+// ── ImageKit auth (browser uploads directly) ─────────────────
+app.get('/api/imagekit/auth', requireAdmin, (req, res) => {
+  const auth = imagekit.getAuthenticationParameters();
   res.json({
-    timestamp,
-    signature,
-    cloudName: process.env.CLOUDINARY_CLOUD_NAME,
-    apiKey: process.env.CLOUDINARY_API_KEY,
-    folder
+    ...auth,
+    publicKey: process.env.IMAGEKIT_PUBLIC_KEY,
+    urlEndpoint: process.env.IMAGEKIT_URL_ENDPOINT
   });
 });
 
@@ -97,7 +90,7 @@ app.post('/api/admin/users', requireAdmin, async (req, res) => {
 app.delete('/api/admin/users/:id', requireAdmin, async (req, res) => {
   const photos = await Photo.find({ userId: req.params.id });
   for (const p of photos) {
-    if (p.cloudinaryId) await cloudinary.uploader.destroy(p.cloudinaryId).catch(() => {});
+    if (p.cloudinaryId) await imagekit.deleteFile(p.cloudinaryId).catch(() => {});
     await Like.deleteMany({ photoId: p._id });
     await Comment.deleteMany({ photoId: p._id });
   }
@@ -119,7 +112,7 @@ app.post('/api/admin/users/:id/photos', requireAdmin, async (req, res) => {
 app.delete('/api/admin/photos/:id', requireAdmin, async (req, res) => {
   const photo = await Photo.findById(req.params.id);
   if (photo) {
-    if (photo.cloudinaryId) await cloudinary.uploader.destroy(photo.cloudinaryId).catch(() => {});
+    if (photo.cloudinaryId) await imagekit.deleteFile(photo.cloudinaryId).catch(() => {});
     await Like.deleteMany({ photoId: photo._id });
     await Comment.deleteMany({ photoId: photo._id });
     await photo.deleteOne();

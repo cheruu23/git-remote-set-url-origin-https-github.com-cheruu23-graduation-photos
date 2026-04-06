@@ -240,40 +240,44 @@
 
     showMsg('upload-msg', `Uploading 0 / ${selectedFiles.length}...`, 'success');
 
-    // Get Cloudinary signature from server
-    const sigRes = await fetch('/api/cloudinary/signature');
-    if (!sigRes.ok) {
-      const e = await sigRes.json().catch(() => ({}));
-      return showMsg('upload-msg', 'Signature error: ' + (e.error || sigRes.status), 'error');
-    }
-    const sig = await sigRes.json();
+    // Get ImageKit auth from server
+    const authRes = await fetch('/api/imagekit/auth');
+    if (!authRes.ok) return showMsg('upload-msg', 'Auth error: ' + authRes.status, 'error');
+    const auth = await authRes.json();
 
     let done = 0;
     for (const file of selectedFiles) {
-      // Upload directly to Cloudinary
-      const fd = new FormData();
-      fd.append('file', file);
-      fd.append('api_key', sig.apiKey);
-      fd.append('timestamp', sig.timestamp);
-      fd.append('signature', sig.signature);
-      fd.append('folder', sig.folder);
+      // Convert file to base64
+      const base64 = await toBase64(file);
 
-      const upRes = await fetch(`https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload`, {
+      // Upload to ImageKit
+      const fd = new FormData();
+      fd.append('file', base64);
+      fd.append('fileName', file.name);
+      fd.append('folder', '/graduation-photos');
+      fd.append('publicKey', auth.publicKey);
+      fd.append('signature', auth.signature);
+      fd.append('expire', auth.expire);
+      fd.append('token', auth.token);
+
+      const upRes = await fetch(`${auth.urlEndpoint}/api/v1/files/upload`
+        .replace(/\/+api/, '/api')
+        .replace(auth.urlEndpoint, 'https://upload.imagekit.io/api/v1/files/upload'), {
         method: 'POST',
         body: fd
       });
       const upData = await upRes.json();
 
-      if (!upRes.ok || !upData.secure_url) {
-        showMsg('upload-msg', `Cloudinary error: ${upData.error?.message || 'unknown'}`, 'error');
+      if (!upRes.ok || !upData.url) {
+        showMsg('upload-msg', `ImageKit error: ${upData.message || 'unknown'}`, 'error');
         continue;
       }
 
-      // Save URL to our DB
+      // Save to DB
       const saveRes = await fetch(`/api/admin/users/${currentUploadUserId}/photos`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: upData.secure_url, cloudinaryId: upData.public_id })
+        body: JSON.stringify({ url: upData.url, cloudinaryId: upData.fileId })
       });
       if (!saveRes.ok) {
         const e = await saveRes.json().catch(() => ({}));
@@ -289,6 +293,15 @@
     selectedFiles = [];
     document.getElementById('preview-thumbs').innerHTML = '';
     document.getElementById('file-input').value = '';
+  }
+
+  function toBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
   }
 
   // ── QR Code ───────────────────────────────────────────────
