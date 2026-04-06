@@ -1,65 +1,77 @@
 const express = require('express');
-const session = require('express-session');
+const cookieParser = require('cookie-parser');
 const multer = require('multer');
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const QRCode = require('qrcode');
 const path = require('path');
-const fs = require('fs');
 const { connect, Admin, User, Photo, Like, Comment } = require('./db');
+const { cloudinary, storage } = require('./cloudinary');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const JWT_SECRET = process.env.JWT_SECRET || 'grad-jwt-secret-2024';
 
-const uploadsDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
-
-const storage = multer.diskStorage({
-  destination: uploadsDir,
-  filename: (req, file, cb) => {
-    const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, unique + path.extname(file.originalname));
-  }
-});
 const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } });
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(session({
-  secret: 'grad-secret-2024',
-  resave: false,
-  saveUninitialized: false,
-  cookie: { maxAge: 24 * 60 * 60 * 1000 }
-}));
-
-app.use('/uploads', express.static(uploadsDir));
+app.use(cookieParser());
 app.use(express.static(path.join(__dirname, '../frontend')));
 
+// ── Auth middleware ───────────────────────────────────────────
 function requireAdmin(req, res, next) {
-  if (req.session.isAdmin) return next();
-  res.status(401).json({ error: 'Unauthorized' });
+  const token = req.cookies?.admin_token || req.headers.authorization?.split(' ')[1];
+  if (!token) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    jwt.verify(token, JWT_SECRET);
+    next();
+  } catch {
+    res.status(401).json({ error: 'Unauthorized' });
+  }
 }
 
-// ─── Admin Auth ───────────────────────────────────────────────
+// ── DB connect on each cold start ─────────────────────────────
+let dbReady = false;
+async function ensureDB() {
+  if (!dbReady) {
+    await connect();
+    const existing = await Admin.findOne({ username: 'admin' });
+    if (!existing) {
+      await Admin.create({ username: 'admin', password: bcrypt.hashSync('admin123', 10) });
+    }
+    dbReady = true;
+  }
+}
+
+app.use(async (req, res, next) => {
+  try { await ensureDB(); next(); } catch (e) { res.status(500).json({ error: 'DB error' }); }
+});
+
+// ── Admin Auth ────────────────────────────────────────────────
 app.post('/api/admin/login', async (req, res) => {
   const { username, password } = req.body;
   const admin = await Admin.findOne({ username });
-  if (!admin || !bcrypt.compareSync(password, admin.password)) {
+  if (!admin || !bcrypt.compareSync(password, admin.password))
     return res.status(401).json({ error: 'Invalid credentials' });
-  }
-  req.session.isAdmin = true;
+
+  const token = jwt.sign({ admin: true }, JWT_SECRET, { expiresIn: '24h' });
+  res.cookie('admin_token', token, { httpOnly: true, sameSite: 'lax', maxAge: 86400000 });
   res.json({ success: true });
 });
 
 app.post('/api/admin/logout', (req, res) => {
-  req.session.destroy();
+  res.clearCookie('admin_token');
   res.json({ success: true });
 });
 
 app.get('/api/admin/me', (req, res) => {
-  res.json({ isAdmin: !!req.session.isAdmin });
+  const token = req.cookies?.admin_token;
+  if (!token) return res.json({ isAdmin: false });
+  try { jwt.verify(token, JWT_SECRET); res.json({ isAdmin: true }); }
+  catch { res.json({ isAdmin: false }); }
 });
 
-// ─── Users ────────────────────────────────────────────────────
+// ── Users ─────────────────────────────────────────────────────
 app.get('/api/admin/users', requireAdmin, async (req, res) => {
   const users = await User.find().sort({ createdAt: -1 });
   res.json(users);
@@ -72,16 +84,13 @@ app.post('/api/admin/users', requireAdmin, async (req, res) => {
   try {
     const user = await User.create({ name, slug });
     res.json(user);
-  } catch (e) {
-    res.status(400).json({ error: e.message });
-  }
+  } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
 app.delete('/api/admin/users/:id', requireAdmin, async (req, res) => {
   const photos = await Photo.find({ userId: req.params.id });
   for (const p of photos) {
-    const fp = path.join(uploadsDir, p.filename);
-    if (fs.existsSync(fp)) fs.unlinkSync(fp);
+    if (p.cloudinaryId) await cloudinary.uploader.destroy(p.cloudinaryId);
     await Like.deleteMany({ photoId: p._id });
     await Comment.deleteMany({ photoId: p._id });
   }
@@ -90,7 +99,7 @@ app.delete('/api/admin/users/:id', requireAdmin, async (req, res) => {
   res.json({ success: true });
 });
 
-// ─── Photos ───────────────────────────────────────────────────
+// ── Photos ────────────────────────────────────────────────────
 app.post('/api/admin/users/:id/photos', requireAdmin, upload.array('photos', 50), async (req, res) => {
   const user = await User.findById(req.params.id);
   if (!user) return res.status(404).json({ error: 'User not found' });
@@ -99,7 +108,8 @@ app.post('/api/admin/users/:id/photos', requireAdmin, upload.array('photos', 50)
   for (const file of req.files) {
     const photo = await Photo.create({
       userId: req.params.id,
-      filename: file.filename,
+      url: file.path,
+      cloudinaryId: file.filename,
       caption: req.body.caption || ''
     });
     inserted.push(photo);
@@ -110,8 +120,7 @@ app.post('/api/admin/users/:id/photos', requireAdmin, upload.array('photos', 50)
 app.delete('/api/admin/photos/:id', requireAdmin, async (req, res) => {
   const photo = await Photo.findById(req.params.id);
   if (photo) {
-    const fp = path.join(uploadsDir, photo.filename);
-    if (fs.existsSync(fp)) fs.unlinkSync(fp);
+    if (photo.cloudinaryId) await cloudinary.uploader.destroy(photo.cloudinaryId);
     await Like.deleteMany({ photoId: photo._id });
     await Comment.deleteMany({ photoId: photo._id });
     await photo.deleteOne();
@@ -119,18 +128,17 @@ app.delete('/api/admin/photos/:id', requireAdmin, async (req, res) => {
   res.json({ success: true });
 });
 
-// ─── QR Code ──────────────────────────────────────────────────
+// ── QR Code ───────────────────────────────────────────────────
 app.get('/api/admin/users/:id/qr', requireAdmin, async (req, res) => {
   const user = await User.findById(req.params.id);
   if (!user) return res.status(404).json({ error: 'User not found' });
-
-  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
   const url = `${baseUrl}/gallery/${user.slug}`;
   const qr = await QRCode.toDataURL(url, { width: 300, margin: 2 });
   res.json({ qr, url });
 });
 
-// ─── Public Gallery ───────────────────────────────────────────
+// ── Public Gallery ────────────────────────────────────────────
 app.get('/api/gallery/:slug', async (req, res) => {
   const user = await User.findOne({ slug: req.params.slug });
   if (!user) return res.status(404).json({ error: 'Not found' });
@@ -141,24 +149,20 @@ app.get('/api/gallery/:slug', async (req, res) => {
     const comments = await Comment.find({ photoId: p._id }).sort({ createdAt: 1 });
     return { ...p.toObject(), likes, comments };
   }));
-
   res.json({ user, photos: photosWithData });
 });
 
-// ─── Likes ────────────────────────────────────────────────────
+// ── Likes ─────────────────────────────────────────────────────
 app.post('/api/photos/:id/like', async (req, res) => {
-  const ip = req.ip;
+  const ip = req.headers['x-forwarded-for'] || req.ip;
   const existing = await Like.findOne({ photoId: req.params.id, ip });
-  if (existing) {
-    await existing.deleteOne();
-  } else {
-    await Like.create({ photoId: req.params.id, ip });
-  }
+  if (existing) await existing.deleteOne();
+  else await Like.create({ photoId: req.params.id, ip });
   const likes = await Like.countDocuments({ photoId: req.params.id });
   res.json({ likes });
 });
 
-// ─── Comments ─────────────────────────────────────────────────
+// ── Comments ──────────────────────────────────────────────────
 app.post('/api/photos/:id/comments', async (req, res) => {
   const { name, message } = req.body;
   if (!name || !message) return res.status(400).json({ error: 'Name and message required' });
@@ -166,24 +170,17 @@ app.post('/api/photos/:id/comments', async (req, res) => {
   res.json(comment);
 });
 
-// ─── SPA fallback ─────────────────────────────────────────────
+// ── SPA fallback ──────────────────────────────────────────────
 app.get('/gallery/:slug', (req, res) => {
   res.sendFile(path.join(__dirname, '../frontend/index.html'));
 });
 
-// ─── Start ────────────────────────────────────────────────────
-connect().then(async () => {
-  const existing = await Admin.findOne({ username: 'admin' });
-  if (!existing) {
-    await Admin.create({ username: 'admin', password: bcrypt.hashSync('admin123', 10) });
-    console.log('Default admin created: admin / admin123');
-  }
-
-  app.listen(PORT, () => {
-    console.log(`Server running at http://localhost:${PORT}`);
-    console.log(`Admin panel:   http://localhost:${PORT}/admin.html`);
+// ── Local dev only ────────────────────────────────────────────
+if (process.env.NODE_ENV !== 'production') {
+  const PORT = process.env.PORT || 3000;
+  ensureDB().then(() => {
+    app.listen(PORT, () => console.log(`http://localhost:${PORT}`));
   });
-}).catch(err => {
-  console.error('MongoDB connection failed:', err.message);
-  process.exit(1);
-});
+}
+
+module.exports = app;

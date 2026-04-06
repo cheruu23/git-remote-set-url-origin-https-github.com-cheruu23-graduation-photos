@@ -22,7 +22,8 @@ const UserSchema = new mongoose.Schema({
 
 const PhotoSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  filename: { type: String, required: true },
+  url: { type: String, required: true },
+  cloudinaryId: { type: String },
   caption: { type: String, default: '' },
   createdAt: { type: Date, default: Date.now }
 });

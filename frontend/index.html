@@ -114,7 +114,7 @@
 
     card.innerHTML = `
       <div class="card-img-wrap">
-        <img src="/uploads/${photo.filename}" alt="${escHtml(photo.caption || 'Graduation photo')}" loading="lazy" />
+        <img src="${photo.url}" alt="${escHtml(photo.caption || 'Graduation photo')}" loading="lazy" />
         <div class="img-overlay">
           <button class="view-btn" onclick="openLightbox(${index})">🔍 View</button>
         </div>
@@ -205,7 +205,7 @@
   function openLightbox(index) {
     currentLightboxIndex = index;
     const photo = allPhotos[index];
-    document.getElementById('lightbox-img').src = `/uploads/${photo.filename}`;
+    document.getElementById('lightbox-img').src = photo.url;
     document.getElementById('lightbox').classList.add('active');
     document.body.style.overflow = 'hidden';
   }
@@ -218,11 +218,11 @@
   document.getElementById('lb-close').onclick = closeLightbox;
   document.getElementById('lb-prev').onclick = () => {
     currentLightboxIndex = (currentLightboxIndex - 1 + allPhotos.length) % allPhotos.length;
-    document.getElementById('lightbox-img').src = `/uploads/${allPhotos[currentLightboxIndex].filename}`;
+    document.getElementById('lightbox-img').src = allPhotos[currentLightboxIndex].url;
   };
   document.getElementById('lb-next').onclick = () => {
     currentLightboxIndex = (currentLightboxIndex + 1) % allPhotos.length;
-    document.getElementById('lightbox-img').src = `/uploads/${allPhotos[currentLightboxIndex].filename}`;
+    document.getElementById('lightbox-img').src = allPhotos[currentLightboxIndex].url;
   };
   document.getElementById('lightbox').addEventListener('click', e => {
     if (e.target === e.currentTarget) closeLightbox();
