@@ -242,7 +242,10 @@
 
     // Get Cloudinary signature from server
     const sigRes = await fetch('/api/cloudinary/signature');
-    if (!sigRes.ok) return showMsg('upload-msg', 'Could not get upload signature', 'error');
+    if (!sigRes.ok) {
+      const e = await sigRes.json().catch(() => ({}));
+      return showMsg('upload-msg', 'Signature error: ' + (e.error || sigRes.status), 'error');
+    }
     const sig = await sigRes.json();
 
     let done = 0;
@@ -259,15 +262,24 @@
         method: 'POST',
         body: fd
       });
-      if (!upRes.ok) { showMsg('upload-msg', `Failed on file ${file.name}`, 'error'); continue; }
       const upData = await upRes.json();
 
+      if (!upRes.ok || !upData.secure_url) {
+        showMsg('upload-msg', `Cloudinary error: ${upData.error?.message || 'unknown'}`, 'error');
+        continue;
+      }
+
       // Save URL to our DB
-      await fetch(`/api/admin/users/${currentUploadUserId}/photos`, {
+      const saveRes = await fetch(`/api/admin/users/${currentUploadUserId}/photos`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: upData.secure_url, cloudinaryId: upData.public_id })
       });
+      if (!saveRes.ok) {
+        const e = await saveRes.json().catch(() => ({}));
+        showMsg('upload-msg', 'Save error: ' + (e.error || saveRes.status), 'error');
+        continue;
+      }
 
       done++;
       showMsg('upload-msg', `Uploading ${done} / ${selectedFiles.length}...`, 'success');
