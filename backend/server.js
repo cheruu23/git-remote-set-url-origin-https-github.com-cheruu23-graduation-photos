@@ -3,10 +3,16 @@ const cookieParser = require('cookie-parser');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const QRCode = require('qrcode');
+const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { connect, Admin, User, Photo, Like, Comment } = require('./db');
 const { getImageKit } = require('./imagekit');
+
+const app = express();
+const JWT_SECRET = process.env.JWT_SECRET || 'grad-jwt-secret-2024';
+// Memory storage — no disk needed, passes buffer to ImageKit
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 const app = express();
 const JWT_SECRET = process.env.JWT_SECRET || 'grad-jwt-secret-2024';
@@ -80,16 +86,6 @@ app.get('/api/admin/me', (req, res) => {
   catch { res.json({ isAdmin: false }); }
 });
 
-// ── ImageKit auth (browser uploads directly) ─────────────────
-app.get('/api/imagekit/auth', requireAdmin, (req, res) => {
-  const auth = getImageKit().getAuthenticationParameters();
-  res.json({
-    ...auth,
-    publicKey: process.env.IMAGEKIT_PUBLIC_KEY,
-    urlEndpoint: process.env.IMAGEKIT_URL_ENDPOINT
-  });
-});
-
 // ── Users ─────────────────────────────────────────────────────
 app.get('/api/admin/users', requireAdmin, async (req, res) => {
   const users = await User.find().sort({ createdAt: -1 });
@@ -118,14 +114,27 @@ app.delete('/api/admin/users/:id', requireAdmin, async (req, res) => {
   res.json({ success: true });
 });
 
-// ── Save photo after direct Cloudinary upload ─────────────────
-app.post('/api/admin/users/:id/photos', requireAdmin, async (req, res) => {
+// ── Upload photos via server → ImageKit ───────────────────────
+app.post('/api/admin/users/:id/photos', requireAdmin, upload.array('photos', 50), async (req, res) => {
   const user = await User.findById(req.params.id);
   if (!user) return res.status(404).json({ error: 'User not found' });
-  const { url, cloudinaryId, caption } = req.body;
-  if (!url) return res.status(400).json({ error: 'url required' });
-  const photo = await Photo.create({ userId: req.params.id, url, cloudinaryId: cloudinaryId || '', caption: caption || '' });
-  res.json(photo);
+
+  const inserted = [];
+  for (const file of req.files) {
+    const result = await getImageKit().upload({
+      file: file.buffer,
+      fileName: file.originalname,
+      folder: '/graduation-photos'
+    });
+    const photo = await Photo.create({
+      userId: req.params.id,
+      url: result.url,
+      cloudinaryId: result.fileId,
+      caption: req.body.caption || ''
+    });
+    inserted.push(photo);
+  }
+  res.json(inserted);
 });
 
 app.delete('/api/admin/photos/:id', requireAdmin, async (req, res) => {

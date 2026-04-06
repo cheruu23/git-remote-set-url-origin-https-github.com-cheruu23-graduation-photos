@@ -13,6 +13,7 @@
     "imagekit": "^6.0.0",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.4.1",
+    "multer": "^2.1.1",
     "qrcode": "^1.5.3"
   }
 }

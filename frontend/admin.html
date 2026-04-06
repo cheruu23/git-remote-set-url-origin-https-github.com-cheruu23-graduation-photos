@@ -238,59 +238,25 @@
     if (!selectedFiles.length) return showMsg('upload-msg', 'Select at least one photo', 'error');
     if (!currentUploadUserId) return showMsg('upload-msg', 'No graduate selected', 'error');
 
-    showMsg('upload-msg', `Uploading 0 / ${selectedFiles.length}...`, 'success');
+    showMsg('upload-msg', `Uploading ${selectedFiles.length} photo(s)...`, 'success');
 
-    // Get ImageKit auth from server
-    const authRes = await fetch('/api/imagekit/auth');
-    if (!authRes.ok) return showMsg('upload-msg', 'Auth error: ' + authRes.status, 'error');
-    const auth = await authRes.json();
+    const formData = new FormData();
+    selectedFiles.forEach(f => formData.append('photos', f));
 
-    let done = 0;
-    for (const file of selectedFiles) {
-      // Convert file to base64
-      const base64 = await toBase64(file);
+    const res = await fetch(`/api/admin/users/${currentUploadUserId}/photos`, {
+      method: 'POST',
+      body: formData
+    });
 
-      // Upload to ImageKit
-      const fd = new FormData();
-      fd.append('file', base64);
-      fd.append('fileName', file.name);
-      fd.append('folder', '/graduation-photos');
-      fd.append('publicKey', auth.publicKey);
-      fd.append('signature', auth.signature);
-      fd.append('expire', auth.expire);
-      fd.append('token', auth.token);
-
-      const upRes = await _fetch('https://upload.imagekit.io/api/v1/files/upload', {
-        method: 'POST',
-        body: fd
-      });
-      const upData = await upRes.json();
-
-      if (!upRes.ok || !upData.url) {
-        showMsg('upload-msg', `ImageKit error: ${upData.message || 'unknown'}`, 'error');
-        continue;
-      }
-
-      // Save to DB
-      const saveRes = await fetch(`/api/admin/users/${currentUploadUserId}/photos`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: upData.url, cloudinaryId: upData.fileId })
-      });
-      if (!saveRes.ok) {
-        const e = await saveRes.json().catch(() => ({}));
-        showMsg('upload-msg', 'Save error: ' + (e.error || saveRes.status), 'error');
-        continue;
-      }
-
-      done++;
-      showMsg('upload-msg', `Uploading ${done} / ${selectedFiles.length}...`, 'success');
+    if (res.ok) {
+      showMsg('upload-msg', 'Photos uploaded!', 'success');
+      selectedFiles = [];
+      document.getElementById('preview-thumbs').innerHTML = '';
+      document.getElementById('file-input').value = '';
+    } else {
+      const err = await res.json().catch(() => ({}));
+      showMsg('upload-msg', err.error || 'Upload failed', 'error');
     }
-
-    showMsg('upload-msg', `${done} photo(s) uploaded!`, 'success');
-    selectedFiles = [];
-    document.getElementById('preview-thumbs').innerHTML = '';
-    document.getElementById('file-input').value = '';
   }
 
   function toBase64(file) {
