@@ -14,6 +14,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'grad-jwt-secret-2024';
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
+app.use(express.static(path.join(__dirname, '../frontend')));
 
 function requireAdmin(req, res, next) {
   const token = req.cookies?.admin_token || req.headers.authorization?.split(' ')[1];
