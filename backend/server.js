@@ -16,7 +16,6 @@ const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } });
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
-app.use(express.static(path.join(__dirname, '../frontend')));
 
 // ── Auth middleware ───────────────────────────────────────────
 function requireAdmin(req, res, next) {
@@ -172,7 +171,10 @@ app.post('/api/photos/:id/comments', async (req, res) => {
 
 // ── SPA fallback ──────────────────────────────────────────────
 app.get('/gallery/:slug', (req, res) => {
-  res.sendFile(path.join(__dirname, '../frontend/index.html'));
+  const fs = require('fs');
+  const html = fs.readFileSync(path.join(__dirname, '../frontend/index.html'), 'utf8');
+  res.setHeader('Content-Type', 'text/html');
+  res.send(html);
 });
 
 // ── Local dev only ────────────────────────────────────────────
