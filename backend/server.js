@@ -6,7 +6,7 @@ const QRCode = require('qrcode');
 const path = require('path');
 const fs = require('fs');
 const { connect, Admin, User, Photo, Like, Comment } = require('./db');
-const imagekit = require('./imagekit');
+const { getImageKit } = require('./imagekit');
 
 const app = express();
 const JWT_SECRET = process.env.JWT_SECRET || 'grad-jwt-secret-2024';
@@ -36,6 +36,17 @@ async function ensureDB() {
 app.use(async (req, res, next) => {
   try { await ensureDB(); next(); }
   catch (e) { res.status(500).json({ error: 'DB error: ' + e.message }); }
+});
+
+// ── Diagnostic ────────────────────────────────────────────────
+app.get('/api/health', (req, res) => {
+  res.json({
+    mongo: !!process.env.MONGODB_URI,
+    imagekit_url: !!process.env.IMAGEKIT_URL_ENDPOINT,
+    imagekit_pub: !!process.env.IMAGEKIT_PUBLIC_KEY,
+    imagekit_priv: !!process.env.IMAGEKIT_PRIVATE_KEY,
+    jwt: !!process.env.JWT_SECRET
+  });
 });
 
 // ── Admin Auth ────────────────────────────────────────────────
@@ -70,7 +81,7 @@ app.get('/api/admin/me', (req, res) => {
 
 // ── ImageKit auth (browser uploads directly) ─────────────────
 app.get('/api/imagekit/auth', requireAdmin, (req, res) => {
-  const auth = imagekit.getAuthenticationParameters();
+  const auth = getImageKit().getAuthenticationParameters();
   res.json({
     ...auth,
     publicKey: process.env.IMAGEKIT_PUBLIC_KEY,
@@ -97,7 +108,7 @@ app.post('/api/admin/users', requireAdmin, async (req, res) => {
 app.delete('/api/admin/users/:id', requireAdmin, async (req, res) => {
   const photos = await Photo.find({ userId: req.params.id });
   for (const p of photos) {
-    if (p.cloudinaryId) await imagekit.deleteFile(p.cloudinaryId).catch(() => {});
+    if (p.cloudinaryId) await getImageKit().deleteFile(p.cloudinaryId).catch(() => {});
     await Like.deleteMany({ photoId: p._id });
     await Comment.deleteMany({ photoId: p._id });
   }
@@ -119,7 +130,7 @@ app.post('/api/admin/users/:id/photos', requireAdmin, async (req, res) => {
 app.delete('/api/admin/photos/:id', requireAdmin, async (req, res) => {
   const photo = await Photo.findById(req.params.id);
   if (photo) {
-    if (photo.cloudinaryId) await imagekit.deleteFile(photo.cloudinaryId).catch(() => {});
+    if (photo.cloudinaryId) await getImageKit().deleteFile(photo.cloudinaryId).catch(() => {});
     await Like.deleteMany({ photoId: photo._id });
     await Comment.deleteMany({ photoId: photo._id });
     await photo.deleteOne();
