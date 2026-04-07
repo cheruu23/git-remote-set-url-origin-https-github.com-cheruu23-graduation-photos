@@ -239,109 +239,149 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ══════════════════════════════════════════════════════════════
-//  DESKTOP — masonry grid
+//  DESKTOP — single photo viewer
 // ══════════════════════════════════════════════════════════════
+let dIndex = 0;
+
 function buildDesktop(data) {
   document.getElementById('grad-name-desktop').textContent = data.user.name;
   spawnConfetti('confetti-d');
 
   if (!data.photos.length) {
-    document.getElementById('gallery-grid').innerHTML = '<div class="empty-state"><span>🖼️</span><p>No photos yet.</p></div>';
+    document.getElementById('d-prev').style.display = 'none';
+    document.getElementById('d-next').style.display = 'none';
+    document.querySelector('.d-side-panel').innerHTML = '<div class="empty-state"><span>🖼️</span><p>No photos yet.</p></div>';
     return;
   }
 
-  const grid = document.getElementById('gallery-grid');
-  data.photos.forEach((photo, i) => grid.appendChild(buildCard(photo, i)));
-
-  requestAnimationFrame(() => {
-    document.querySelectorAll('.photo-card').forEach((card, i) => {
-      setTimeout(() => card.classList.add('visible'), i * 80);
-    });
+  // Build dots
+  const dotsEl = document.getElementById('d-dots');
+  allPhotos.forEach((_, i) => {
+    const dot = document.createElement('div');
+    dot.className = 'd-dot' + (i === 0 ? ' active' : '');
+    dot.onclick = () => dGoTo(i);
+    dotsEl.appendChild(dot);
   });
 
-  document.getElementById('lb-close').onclick = closeLb;
-  document.getElementById('lb-prev').onclick = () => { currentLbIndex = (currentLbIndex - 1 + allPhotos.length) % allPhotos.length; document.getElementById('lightbox-img').src = allPhotos[currentLbIndex].url; };
-  document.getElementById('lb-next').onclick = () => { currentLbIndex = (currentLbIndex + 1) % allPhotos.length; document.getElementById('lightbox-img').src = allPhotos[currentLbIndex].url; };
-  document.getElementById('lightbox').addEventListener('click', e => { if (e.target === e.currentTarget) closeLb(); });
+  // Nav
+  document.getElementById('d-prev').onclick = () => dGoTo(dIndex - 1);
+  document.getElementById('d-next').onclick = () => dGoTo(dIndex + 1);
+
+  // Keyboard
   document.addEventListener('keydown', e => {
-    if (!document.getElementById('lightbox').classList.contains('active')) return;
-    if (e.key === 'Escape') closeLb();
-    if (e.key === 'ArrowLeft') document.getElementById('lb-prev').click();
-    if (e.key === 'ArrowRight') document.getElementById('lb-next').click();
+    if (e.key === 'ArrowLeft') dGoTo(dIndex - 1);
+    if (e.key === 'ArrowRight') dGoTo(dIndex + 1);
   });
+
+  dGoTo(0);
 }
 
-function buildCard(photo, index) {
+function dGoTo(i) {
+  if (i < 0 || i >= allPhotos.length) return;
+  dIndex = i;
+  const photo = allPhotos[i];
   const id = photo._id;
-  const card = document.createElement('div');
-  card.className = 'photo-card';
-  card.innerHTML = `
-    <div class="card-img-wrap">
-      <img src="${photo.url}" alt="${esc(photo.caption || 'photo')}" loading="lazy" />
-      <div class="img-overlay"><button class="view-btn" onclick="openLb(${index})">🔍 View</button></div>
-    </div>
-    ${photo.caption ? `<p class="photo-caption">${esc(photo.caption)}</p>` : ''}
-    <div class="card-actions">
-      <button class="d-like-btn" id="d-like-${id}" onclick="dLike('${id}',this)" data-liked="false">
-        <span class="heart">🤍</span>
-        <span class="d-like-count" id="d-lcount-${id}">${photo.likes} likes</span>
-      </button>
-      <span class="d-comment-count">💬 <span id="d-ccount-${id}">${photo.comments.length}</span></span>
-    </div>
-    <div class="d-comments-section">
-      <div class="d-comments-list" id="d-comments-${id}">
-        ${photo.comments.map(c => `<div class="d-comment-item"><strong>${esc(c.name)}</strong>${esc(c.message)}</div>`).join('')}
-      </div>
-      <div class="d-comment-form">
-        <input type="text" id="d-cname-${id}" placeholder="Your name" maxlength="50" />
-        <textarea id="d-cmsg-${id}" rows="2" placeholder="Leave a message..." maxlength="300"></textarea>
-        <button class="d-post-btn" onclick="dPost('${id}')">Post ✉️</button>
-      </div>
+
+  // Photo
+  const img = document.getElementById('d-photo');
+  img.style.animation = 'none';
+  img.offsetHeight; // reflow
+  img.style.animation = '';
+  img.src = photo.url;
+  img.alt = photo.caption || 'photo';
+
+  // Header
+  document.getElementById('d-side-name').textContent = document.getElementById('grad-name-desktop').textContent;
+  document.getElementById('d-side-counter').textContent = `Photo ${i + 1} of ${allPhotos.length}`;
+
+  // Caption
+  const capEl = document.getElementById('d-caption');
+  capEl.textContent = photo.caption || '';
+
+  // Likes
+  const likeBtn = document.getElementById('d-like-btn');
+  likeBtn.dataset.id = id;
+  likeBtn.dataset.liked = 'false';
+  document.getElementById('d-heart').textContent = '🤍';
+  likeBtn.classList.remove('liked');
+  document.getElementById('d-like-count').textContent = `${photo.likes} likes`;
+
+  // Comments
+  const list = document.getElementById('d-comments-list');
+  list.innerHTML = '';
+  if (!photo.comments.length) {
+    list.innerHTML = '<p style="color:#444;font-size:0.82rem;text-align:center;padding:1rem">No comments yet.</p>';
+  } else {
+    photo.comments.forEach(c => list.appendChild(dBuildComment(c)));
+    list.scrollTop = list.scrollHeight;
+  }
+
+  // Clear form
+  document.getElementById('d-cname').value = '';
+  document.getElementById('d-cmsg').value = '';
+
+  // Dots
+  document.querySelectorAll('.d-dot').forEach((d, idx) => d.classList.toggle('active', idx === i));
+
+  // Nav state
+  document.getElementById('d-prev').disabled = i === 0;
+  document.getElementById('d-next').disabled = i === allPhotos.length - 1;
+}
+
+function dBuildComment(c) {
+  const div = document.createElement('div');
+  div.className = 'd-comment-item';
+  div.innerHTML = `
+    <div class="d-c-avatar">${esc(c.name[0].toUpperCase())}</div>
+    <div class="d-c-body">
+      <div class="d-c-name">${esc(c.name)}</div>
+      <div class="d-c-msg">${esc(c.message)}</div>
     </div>`;
-  return card;
+  return div;
 }
 
-function openLb(index) {
-  currentLbIndex = index;
-  document.getElementById('lightbox-img').src = allPhotos[index].url;
-  document.getElementById('lightbox').classList.add('active');
-  document.body.style.overflow = 'hidden';
-}
-function closeLb() {
-  document.getElementById('lightbox').classList.remove('active');
-  document.body.style.overflow = '';
-}
-
-async function dLike(id, btn) {
-  const heart = btn.querySelector('.heart');
+async function dLike() {
+  const btn = document.getElementById('d-like-btn');
+  const id = btn.dataset.id;
   const liked = btn.dataset.liked === 'true';
   btn.dataset.liked = String(!liked);
-  heart.textContent = !liked ? '❤️' : '🤍';
+  document.getElementById('d-heart').textContent = !liked ? '❤️' : '🤍';
   btn.classList.toggle('liked', !liked);
-  btn.classList.add('pop');
-  setTimeout(() => btn.classList.remove('pop'), 300);
   const res = await fetch(`/api/photos/${id}/like`, { method: 'POST' });
   const data = await res.json();
-  document.getElementById(`d-lcount-${id}`).textContent = `${data.likes} likes`;
+  document.getElementById('d-like-count').textContent = `${data.likes} likes`;
+  // Update in allPhotos
+  const photo = allPhotos.find(p => p._id === id);
+  if (photo) photo.likes = data.likes;
 }
 
-async function dPost(id) {
-  const nameEl = document.getElementById(`d-cname-${id}`);
-  const msgEl  = document.getElementById(`d-cmsg-${id}`);
-  const name = nameEl.value.trim(), message = msgEl.value.trim();
-  if (!name || !message) { msgEl.classList.add('shake'); setTimeout(() => msgEl.classList.remove('shake'), 400); return; }
-  const res = await fetch(`/api/photos/${id}/comments`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, message }) });
+async function dPost() {
+  const btn = document.getElementById('d-like-btn');
+  const id = btn.dataset.id;
+  const name = document.getElementById('d-cname').value.trim();
+  const message = document.getElementById('d-cmsg').value.trim();
+  const msgEl = document.getElementById('d-cmsg');
+  if (!name || !message) {
+    msgEl.style.borderColor = '#e94560';
+    setTimeout(() => msgEl.style.borderColor = '', 800);
+    return;
+  }
+  const res = await fetch(`/api/photos/${id}/comments`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, message })
+  });
   if (res.ok) {
     const c = await res.json();
-    const list = document.getElementById(`d-comments-${id}`);
-    const div = document.createElement('div');
-    div.className = 'd-comment-item new';
-    div.innerHTML = `<strong>${esc(c.name)}</strong>${esc(c.message)}`;
+    const list = document.getElementById('d-comments-list');
+    if (list.querySelector('p')) list.innerHTML = '';
+    const div = dBuildComment(c);
+    div.classList.add('new');
     list.appendChild(div);
     list.scrollTop = list.scrollHeight;
-    nameEl.value = ''; msgEl.value = '';
-    const cc = document.getElementById(`d-ccount-${id}`);
-    cc.textContent = parseInt(cc.textContent || 0) + 1;
+    document.getElementById('d-cname').value = '';
+    document.getElementById('d-cmsg').value = '';
+    const photo = allPhotos.find(p => p._id === id);
+    if (photo) photo.comments.push(c);
   }
 }
 
