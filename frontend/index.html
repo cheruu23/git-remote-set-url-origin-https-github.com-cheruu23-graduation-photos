@@ -46,50 +46,7 @@
       <div class="gold-line"></div>
     </div>
   </header>
-  <main class="d-main">
-    <!-- Single photo viewer -->
-    <div class="d-viewer">
-      <button class="d-nav d-prev" id="d-prev">&#8249;</button>
-      <div class="d-photo-panel">
-        <div class="d-img-wrap">
-          <img id="d-photo" src="" alt="" />
-        </div>
-      </div>
-      <button class="d-nav d-next" id="d-next">&#8250;</button>
-      <div class="d-side-panel">
-        <!-- Header -->
-        <div class="d-side-header">
-          <div class="d-avatar">🎓</div>
-          <div>
-            <div class="d-side-name" id="d-side-name"></div>
-            <div class="d-side-counter" id="d-side-counter"></div>
-          </div>
-        </div>
-        <!-- Caption -->
-        <div class="d-caption" id="d-caption"></div>
-        <!-- Comments -->
-        <div class="d-comments-list" id="d-comments-list"></div>
-        <!-- Actions -->
-        <div class="d-actions">
-          <button class="d-like-btn" id="d-like-btn" onclick="dLike()">
-            <span class="heart" id="d-heart">🤍</span>
-            <span id="d-like-count">0 likes</span>
-          </button>
-        </div>
-        <!-- Comment form -->
-        <div class="d-comment-form">
-          <input type="text" id="d-cname" placeholder="Your name" maxlength="50" />
-          <div class="d-input-row">
-            <input type="text" id="d-cmsg" placeholder="Add a comment..." maxlength="300"
-              onkeydown="if(event.key==='Enter') dPost()" />
-            <button class="d-post-btn" onclick="dPost()">Post</button>
-          </div>
-        </div>
-        <!-- Dots -->
-        <div class="d-dots" id="d-dots"></div>
-      </div>
-    </div>
-  </main>
+  <div id="d-feed"></div>
 </div>
 
 <!-- ── COMMENT SHEET (mobile) ── -->

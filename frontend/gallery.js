@@ -239,131 +239,92 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ══════════════════════════════════════════════════════════════
-//  DESKTOP — single photo viewer
+//  DESKTOP — scrollable feed (same as mobile but wider)
 // ══════════════════════════════════════════════════════════════
-let dIndex = 0;
-
 function buildDesktop(data) {
   document.getElementById('grad-name-desktop').textContent = data.user.name;
   spawnConfetti('confetti-d');
 
+  const feed = document.getElementById('d-feed');
   if (!data.photos.length) {
-    document.getElementById('d-prev').style.display = 'none';
-    document.getElementById('d-next').style.display = 'none';
-    document.querySelector('.d-side-panel').innerHTML = '<div class="empty-state"><span>🖼️</span><p>No photos yet.</p></div>';
+    feed.innerHTML = '<div class="empty-state"><span>🖼️</span><p>No photos yet.</p></div>';
     return;
   }
 
-  // Build dots
-  const dotsEl = document.getElementById('d-dots');
-  allPhotos.forEach((_, i) => {
-    const dot = document.createElement('div');
-    dot.className = 'd-dot' + (i === 0 ? ' active' : '');
-    dot.onclick = () => dGoTo(i);
-    dotsEl.appendChild(dot);
+  data.photos.forEach((photo, i) => {
+    const post = buildDPost(photo, i, data.user.name);
+    post.style.animationDelay = `${i * 0.07}s`;
+    feed.appendChild(post);
   });
-
-  // Nav
-  document.getElementById('d-prev').onclick = () => dGoTo(dIndex - 1);
-  document.getElementById('d-next').onclick = () => dGoTo(dIndex + 1);
-
-  // Keyboard
-  document.addEventListener('keydown', e => {
-    if (e.key === 'ArrowLeft') dGoTo(dIndex - 1);
-    if (e.key === 'ArrowRight') dGoTo(dIndex + 1);
-  });
-
-  dGoTo(0);
 }
 
-function dGoTo(i) {
-  if (i < 0 || i >= allPhotos.length) return;
-  dIndex = i;
-  const photo = allPhotos[i];
+function buildDPost(photo, index, userName) {
   const id = photo._id;
+  const post = document.createElement('div');
+  post.className = 'd-post';
 
-  // Photo
-  const img = document.getElementById('d-photo');
-  img.style.animation = 'none';
-  img.offsetHeight; // reflow
-  img.style.animation = '';
-  img.src = photo.url;
-  img.alt = photo.caption || 'photo';
-
-  // Header
-  document.getElementById('d-side-name').textContent = document.getElementById('grad-name-desktop').textContent;
-  document.getElementById('d-side-counter').textContent = `Photo ${i + 1} of ${allPhotos.length}`;
-
-  // Caption
-  const capEl = document.getElementById('d-caption');
-  capEl.textContent = photo.caption || '';
-
-  // Likes
-  const likeBtn = document.getElementById('d-like-btn');
-  likeBtn.dataset.id = id;
-  likeBtn.dataset.liked = 'false';
-  document.getElementById('d-heart').textContent = '🤍';
-  likeBtn.classList.remove('liked');
-  document.getElementById('d-like-count').textContent = `${photo.likes} likes`;
-
-  // Comments
-  const list = document.getElementById('d-comments-list');
-  list.innerHTML = '';
-  if (!photo.comments.length) {
-    list.innerHTML = '<p style="color:#444;font-size:0.82rem;text-align:center;padding:1rem">No comments yet.</p>';
-  } else {
-    photo.comments.forEach(c => list.appendChild(dBuildComment(c)));
-    list.scrollTop = list.scrollHeight;
-  }
-
-  // Clear form
-  document.getElementById('d-cname').value = '';
-  document.getElementById('d-cmsg').value = '';
-
-  // Dots
-  document.querySelectorAll('.d-dot').forEach((d, idx) => d.classList.toggle('active', idx === i));
-
-  // Nav state
-  document.getElementById('d-prev').disabled = i === 0;
-  document.getElementById('d-next').disabled = i === allPhotos.length - 1;
+  post.innerHTML = `
+    <div class="d-post-header">
+      <div class="d-post-avatar">🎓</div>
+      <div>
+        <div class="d-post-name">${esc(userName)}</div>
+        <div class="d-post-counter">Photo ${index + 1} of ${allPhotos.length}</div>
+      </div>
+    </div>
+    <div class="d-post-img">
+      <img src="${photo.url}" alt="${esc(photo.caption || 'photo')}" loading="${index < 2 ? 'eager' : 'lazy'}" />
+    </div>
+    ${photo.caption ? `<div class="d-post-caption">${esc(photo.caption)}</div>` : ''}
+    <div class="d-post-actions">
+      <button class="d-post-like-btn" id="d-like-${id}" onclick="dLike('${id}', this)" data-liked="false">
+        <span class="heart">🤍</span>
+      </button>
+      <span class="d-post-likes" id="d-likes-${id}">${photo.likes} likes</span>
+    </div>
+    <div class="d-post-comments" id="d-comments-${id}">
+      ${photo.comments.length
+        ? photo.comments.map(c => dCommentHTML(c)).join('')
+        : '<p style="color:#444;font-size:0.82rem">No comments yet.</p>'}
+    </div>
+    <div class="d-post-form">
+      <input type="text" id="d-cname-${id}" placeholder="Your name" maxlength="50" />
+      <input type="text" id="d-cmsg-${id}" placeholder="Add a comment..."
+        maxlength="300" onkeydown="if(event.key==='Enter') dPost('${id}')" />
+      <button class="d-post-form-post" onclick="dPost('${id}')">Post</button>
+    </div>
+  `;
+  return post;
 }
 
-function dBuildComment(c) {
-  const div = document.createElement('div');
-  div.className = 'd-comment-item';
-  div.innerHTML = `
-    <div class="d-c-avatar">${esc(c.name[0].toUpperCase())}</div>
-    <div class="d-c-body">
-      <div class="d-c-name">${esc(c.name)}</div>
-      <div class="d-c-msg">${esc(c.message)}</div>
-    </div>`;
-  return div;
+function dCommentHTML(c) {
+  return `<div class="d-post-comment">
+    <div class="d-post-c-avatar">${esc(c.name[0].toUpperCase())}</div>
+    <div>
+      <div class="d-post-c-name">${esc(c.name)}</div>
+      <div class="d-post-c-msg">${esc(c.message)}</div>
+    </div>
+  </div>`;
 }
 
-async function dLike() {
-  const btn = document.getElementById('d-like-btn');
-  const id = btn.dataset.id;
+async function dLike(id, btn) {
+  const heart = btn.querySelector('.heart');
   const liked = btn.dataset.liked === 'true';
   btn.dataset.liked = String(!liked);
-  document.getElementById('d-heart').textContent = !liked ? '❤️' : '🤍';
+  heart.textContent = !liked ? '❤️' : '🤍';
   btn.classList.toggle('liked', !liked);
   const res = await fetch(`/api/photos/${id}/like`, { method: 'POST' });
   const data = await res.json();
-  document.getElementById('d-like-count').textContent = `${data.likes} likes`;
-  // Update in allPhotos
-  const photo = allPhotos.find(p => p._id === id);
-  if (photo) photo.likes = data.likes;
+  document.getElementById(`d-likes-${id}`).textContent = `${data.likes} likes`;
 }
 
-async function dPost() {
-  const btn = document.getElementById('d-like-btn');
-  const id = btn.dataset.id;
-  const name = document.getElementById('d-cname').value.trim();
-  const message = document.getElementById('d-cmsg').value.trim();
-  const msgEl = document.getElementById('d-cmsg');
+async function dPost(id) {
+  const nameEl = document.getElementById(`d-cname-${id}`);
+  const msgEl  = document.getElementById(`d-cmsg-${id}`);
+  const name = nameEl.value.trim(), message = msgEl.value.trim();
   if (!name || !message) {
-    msgEl.style.borderColor = '#e94560';
-    setTimeout(() => msgEl.style.borderColor = '', 800);
+    const el = !name ? nameEl : msgEl;
+    el.style.borderColor = '#e94560';
+    setTimeout(() => el.style.borderColor = '', 800);
     return;
   }
   const res = await fetch(`/api/photos/${id}/comments`, {
@@ -372,16 +333,15 @@ async function dPost() {
   });
   if (res.ok) {
     const c = await res.json();
-    const list = document.getElementById('d-comments-list');
+    const list = document.getElementById(`d-comments-${id}`);
     if (list.querySelector('p')) list.innerHTML = '';
-    const div = dBuildComment(c);
-    div.classList.add('new');
+    const div = document.createElement('div');
+    div.className = 'd-post-comment new';
+    div.innerHTML = dCommentHTML(c).replace('<div class="d-post-comment">', '').replace('</div>\n  </div>', '</div>');
+    div.innerHTML = `<div class="d-post-c-avatar">${esc(c.name[0].toUpperCase())}</div><div><div class="d-post-c-name">${esc(c.name)}</div><div class="d-post-c-msg">${esc(c.message)}</div></div>`;
     list.appendChild(div);
     list.scrollTop = list.scrollHeight;
-    document.getElementById('d-cname').value = '';
-    document.getElementById('d-cmsg').value = '';
-    const photo = allPhotos.find(p => p._id === id);
-    if (photo) photo.comments.push(c);
+    nameEl.value = ''; msgEl.value = '';
   }
 }
 
