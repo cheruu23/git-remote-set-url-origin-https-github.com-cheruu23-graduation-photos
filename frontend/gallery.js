@@ -2,14 +2,17 @@ const slug = location.pathname.split('/gallery/')[1];
 const isMobile = window.innerWidth <= 768;
 let allPhotos = [];
 let currentLbIndex = 0;
+let activeSheetPhotoId = null;
+let lastTap = 0;
 
-function escHtml(s) {
+function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 // ── Confetti ──────────────────────────────────────────────────
-function spawnConfetti() {
-  const c = document.getElementById('confetti');
+function spawnConfetti(containerId) {
+  const c = document.getElementById(containerId);
+  if (!c) return;
   const colors = ['#f9ca24','#f0932b','#6ab04c','#e056fd','#22a6b3','#eb4d4b','#badc58','#f0c040'];
   for (let i = 0; i < 80; i++) {
     const el = document.createElement('div');
@@ -28,11 +31,9 @@ async function loadGallery() {
   document.getElementById('loading-screen').style.display = 'none';
 
   if (!res.ok) {
-    const msg = '<div class="empty-state"><span>📭</span><p>Gallery not found.</p></div>';
-    if (isMobile) document.getElementById('slides').innerHTML = msg;
-    else document.getElementById('gallery-grid').innerHTML = msg;
-    document.getElementById('mobile-view').style.display = isMobile ? 'block' : 'none';
-    document.getElementById('desktop-view').style.display = isMobile ? 'none' : 'block';
+    if (isMobile) document.getElementById('ig-feed').innerHTML = '<div class="ig-empty"><span>📭</span><p>Gallery not found.</p></div>';
+    else document.getElementById('gallery-grid').innerHTML = '<div class="empty-state"><span>📭</span><p>Gallery not found.</p></div>';
+    showViews();
     return;
   }
 
@@ -40,84 +41,102 @@ async function loadGallery() {
   allPhotos = data.photos;
   document.title = `${data.user.name} — Graduation`;
 
-  // Show splash
   document.getElementById('grad-name').textContent = data.user.name;
   document.getElementById('hero-splash').style.display = 'flex';
-  spawnConfetti();
+  spawnConfetti('confetti');
 
-  // Show correct view
-  if (isMobile) {
-    document.getElementById('mobile-view').style.display = 'block';
-    document.getElementById('desktop-view').style.display = 'none';
-    buildMobileView(data);
-  } else {
-    document.getElementById('mobile-view').style.display = 'none';
-    document.getElementById('desktop-view').style.display = 'block';
-    buildDesktopView(data);
-  }
+  showViews();
+
+  if (isMobile) buildMobile(data);
+  else buildDesktop(data);
+}
+
+function showViews() {
+  document.getElementById('mobile-view').style.display  = isMobile ? 'block' : 'none';
+  document.getElementById('desktop-view').style.display = isMobile ? 'none'  : 'block';
 }
 
 // ══════════════════════════════════════════════════════════════
-// MOBILE VIEW
+//  MOBILE — Instagram style
 // ══════════════════════════════════════════════════════════════
-function buildMobileView(data) {
+function buildMobile(data) {
+  document.getElementById('ig-username').textContent = data.user.name;
+
+  const feed = document.getElementById('ig-feed');
   if (!data.photos.length) {
-    document.getElementById('slides').innerHTML = '<div class="empty-state"><span>🖼️</span><p>No photos yet.</p></div>';
-    document.getElementById('scroll-hint').style.display = 'none';
+    feed.innerHTML = '<div class="ig-empty"><span>🖼️</span><p>No photos yet.</p></div>';
     return;
   }
-  const container = document.getElementById('slides');
-  data.photos.forEach((photo, i) => container.appendChild(buildSlide(photo, i)));
-  if (data.photos.length < 2) document.getElementById('scroll-hint').style.display = 'none';
+
+  data.photos.forEach((photo, i) => {
+    feed.appendChild(buildPost(photo, i, data.user.name));
+  });
 }
 
-function buildSlide(photo, index) {
+function buildPost(photo, index, userName) {
   const id = photo._id;
-  const slide = document.createElement('div');
-  slide.className = 'slide';
-  slide.innerHTML = `
-    <div class="slide-img">
-      <img src="${photo.url}" alt="${escHtml(photo.caption||'photo')}" loading="${index<2?'eager':'lazy'}" />
-      <div class="slide-counter">${index+1} / ${allPhotos.length}</div>
-      ${photo.caption?`<div class="slide-caption">${escHtml(photo.caption)}</div>`:''}
+  const post = document.createElement('div');
+  post.className = 'ig-post';
+  post.style.animationDelay = `${index * 0.06}s`;
+
+  post.innerHTML = `
+    <div class="ig-post-header">
+      <div class="ig-avatar">🎓</div>
+      <div>
+        <div class="ig-post-name">${esc(userName)}</div>
+        <div class="ig-post-num">Photo ${index + 1} of ${allPhotos.length}</div>
+      </div>
     </div>
-    <div class="slide-panel">
-      <div class="panel-actions">
-        <button class="m-like-btn" id="m-like-${id}" onclick="mToggleLike('${id}',this)" data-liked="false">
-          <span class="heart">🤍</span>
-        </button>
-        <span class="m-like-count" id="m-lcount-${id}">${photo.likes} likes</span>
-        <button class="m-comment-btn" onclick="mToggleComments('${id}')">
-          💬 <span id="m-ccount-${id}">${photo.comments.length}</span>
-        </button>
-      </div>
-      <div class="comments-drawer" id="m-drawer-${id}">
-        <div class="m-comments-list" id="m-comments-${id}">
-          ${photo.comments.map(c=>`<div class="m-comment-item"><strong>${escHtml(c.name)}</strong>${escHtml(c.message)}</div>`).join('')}
-        </div>
-        <div class="m-comment-form">
-          <input type="text" id="m-cinput-${id}" placeholder="Name · Message" maxlength="100"
-            onkeydown="if(event.key==='Enter')mPostComment('${id}')" />
-          <button onclick="mPostComment('${id}')">Post</button>
-        </div>
-      </div>
-    </div>`;
-  return slide;
+
+    <div class="ig-photo-wrap" id="wrap-${id}">
+      <img src="${photo.url}" alt="${esc(photo.caption || 'photo')}" loading="${index < 2 ? 'eager' : 'lazy'}" />
+      <div class="dt-heart" id="dt-${id}">❤️</div>
+    </div>
+
+    <div class="ig-actions">
+      <button class="ig-btn" id="like-btn-${id}" onclick="igLike('${id}', this)" data-liked="false">
+        <span class="heart">🤍</span>
+      </button>
+      <button class="ig-btn" onclick="openSheet('${id}')">💬</button>
+      <div class="ig-spacer"></div>
+    </div>
+
+    <div class="ig-likes" id="likes-${id}">${photo.likes} likes</div>
+
+    ${photo.caption ? `<div class="ig-caption"><strong>${esc(userName)}</strong>${esc(photo.caption)}</div>` : ''}
+
+    <div class="ig-view-comments" onclick="openSheet('${id}')">
+      ${photo.comments.length > 0
+        ? `View all ${photo.comments.length} comment${photo.comments.length > 1 ? 's' : ''}`
+        : 'Add a comment...'}
+    </div>
+  `;
+
+  // Double-tap to like
+  const wrap = post.querySelector('.ig-photo-wrap');
+  wrap.addEventListener('touchend', e => {
+    const now = Date.now();
+    if (now - lastTap < 300) {
+      e.preventDefault();
+      const btn = post.querySelector(`#like-btn-${id}`);
+      if (btn.dataset.liked !== 'true') igLike(id, btn);
+      showDtHeart(id);
+    }
+    lastTap = now;
+  });
+
+  return post;
 }
 
-function mToggleComments(id) {
-  const d = document.getElementById(`m-drawer-${id}`);
-  d.classList.toggle('open');
-  if (d.classList.contains('open')) {
-    setTimeout(() => {
-      const l = document.getElementById(`m-comments-${id}`);
-      l.scrollTop = l.scrollHeight;
-      document.getElementById(`m-cinput-${id}`).focus();
-    }, 50);
-  }
+function showDtHeart(id) {
+  const el = document.getElementById(`dt-${id}`);
+  el.classList.remove('hide');
+  el.classList.add('show');
+  setTimeout(() => { el.classList.remove('show'); el.classList.add('hide'); }, 800);
+  setTimeout(() => el.classList.remove('hide'), 1100);
 }
 
-async function mToggleLike(id, btn) {
+async function igLike(id, btn) {
   const heart = btn.querySelector('.heart');
   const liked = btn.dataset.liked === 'true';
   btn.dataset.liked = String(!liked);
@@ -125,37 +144,106 @@ async function mToggleLike(id, btn) {
   btn.classList.toggle('liked', !liked);
   const res = await fetch(`/api/photos/${id}/like`, { method: 'POST' });
   const data = await res.json();
-  document.getElementById(`m-lcount-${id}`).textContent = `${data.likes} likes`;
+  document.getElementById(`likes-${id}`).textContent = `${data.likes} likes`;
 }
 
-async function mPostComment(id) {
-  const input = document.getElementById(`m-cinput-${id}`);
-  const val = input.value.trim();
-  const dot = val.indexOf('·');
-  let name, message;
-  if (dot > 0) { name = val.slice(0,dot).trim(); message = val.slice(dot+1).trim(); }
-  else { const sp = val.indexOf(' '); if (sp<1){input.style.borderColor='#e94560';setTimeout(()=>input.style.borderColor='',800);return;} name=val.slice(0,sp).trim(); message=val.slice(sp+1).trim(); }
-  if (!name||!message){input.style.borderColor='#e94560';setTimeout(()=>input.style.borderColor='',800);return;}
-  const res = await fetch(`/api/photos/${id}/comments`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,message})});
+// ── Comment Sheet ─────────────────────────────────────────────
+function openSheet(photoId) {
+  activeSheetPhotoId = photoId;
+  const photo = allPhotos.find(p => p._id === photoId);
+  const list = document.getElementById('sheet-comments');
+  list.innerHTML = '';
+
+  if (photo && photo.comments.length) {
+    photo.comments.forEach(c => list.appendChild(buildSheetComment(c)));
+  } else {
+    list.innerHTML = '<p style="color:#666;font-size:0.85rem;text-align:center;padding:1rem">No comments yet. Be first!</p>';
+  }
+
+  document.getElementById('sheet-name').value = '';
+  document.getElementById('sheet-msg').value = '';
+  document.getElementById('comment-sheet').classList.add('open');
+  document.getElementById('sheet-overlay').classList.add('open');
+  setTimeout(() => {
+    list.scrollTop = list.scrollHeight;
+    document.getElementById('sheet-msg').focus();
+  }, 350);
+}
+
+function closeSheet() {
+  document.getElementById('comment-sheet').classList.remove('open');
+  document.getElementById('sheet-overlay').classList.remove('open');
+  activeSheetPhotoId = null;
+}
+
+function buildSheetComment(c) {
+  const div = document.createElement('div');
+  div.className = 'sc-item';
+  div.innerHTML = `
+    <div class="sc-avatar">${esc(c.name[0].toUpperCase())}</div>
+    <div class="sc-body">
+      <div class="sc-name">${esc(c.name)}</div>
+      <div class="sc-msg">${esc(c.message)}</div>
+    </div>`;
+  return div;
+}
+
+async function postSheetComment() {
+  if (!activeSheetPhotoId) return;
+  const name = document.getElementById('sheet-name').value.trim();
+  const message = document.getElementById('sheet-msg').value.trim();
+  if (!name || !message) {
+    const el = !name ? document.getElementById('sheet-name') : document.getElementById('sheet-msg');
+    el.style.borderColor = '#e94560';
+    setTimeout(() => el.style.borderColor = '', 800);
+    return;
+  }
+
+  const res = await fetch(`/api/photos/${activeSheetPhotoId}/comments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, message })
+  });
+
   if (res.ok) {
     const c = await res.json();
-    const list = document.getElementById(`m-comments-${id}`);
-    const div = document.createElement('div');
-    div.className = 'm-comment-item new';
-    div.innerHTML = `<strong>${escHtml(c.name)}</strong>${escHtml(c.message)}`;
+    const list = document.getElementById('sheet-comments');
+    // Remove "no comments" placeholder
+    if (list.querySelector('p')) list.innerHTML = '';
+    const div = buildSheetComment(c);
+    div.classList.add('new');
     list.appendChild(div);
     list.scrollTop = list.scrollHeight;
-    input.value = '';
-    const cc = document.getElementById(`m-ccount-${id}`);
-    cc.textContent = parseInt(cc.textContent||0)+1;
+    document.getElementById('sheet-name').value = '';
+    document.getElementById('sheet-msg').value = '';
+
+    // Update comment count in feed
+    const photo = allPhotos.find(p => p._id === activeSheetPhotoId);
+    if (photo) {
+      photo.comments.push(c);
+      const viewEl = document.querySelector(`#wrap-${activeSheetPhotoId}`)
+        ?.closest('.ig-post')?.querySelector('.ig-view-comments');
+      if (viewEl) {
+        const count = photo.comments.length;
+        viewEl.textContent = `View all ${count} comment${count > 1 ? 's' : ''}`;
+      }
+    }
   }
 }
 
+// Enter key to post
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('sheet-msg')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') postSheetComment();
+  });
+});
+
 // ══════════════════════════════════════════════════════════════
-// DESKTOP VIEW
+//  DESKTOP — masonry grid
 // ══════════════════════════════════════════════════════════════
-function buildDesktopView(data) {
+function buildDesktop(data) {
   document.getElementById('grad-name-desktop').textContent = data.user.name;
+  spawnConfetti('confetti-d');
 
   if (!data.photos.length) {
     document.getElementById('gallery-grid').innerHTML = '<div class="empty-state"><span>🖼️</span><p>No photos yet.</p></div>';
@@ -171,16 +259,15 @@ function buildDesktopView(data) {
     });
   });
 
-  // Lightbox
   document.getElementById('lb-close').onclick = closeLb;
-  document.getElementById('lb-prev').onclick = () => { currentLbIndex=(currentLbIndex-1+allPhotos.length)%allPhotos.length; document.getElementById('lightbox-img').src=allPhotos[currentLbIndex].url; };
-  document.getElementById('lb-next').onclick = () => { currentLbIndex=(currentLbIndex+1)%allPhotos.length; document.getElementById('lightbox-img').src=allPhotos[currentLbIndex].url; };
-  document.getElementById('lightbox').addEventListener('click', e => { if(e.target===e.currentTarget) closeLb(); });
+  document.getElementById('lb-prev').onclick = () => { currentLbIndex = (currentLbIndex - 1 + allPhotos.length) % allPhotos.length; document.getElementById('lightbox-img').src = allPhotos[currentLbIndex].url; };
+  document.getElementById('lb-next').onclick = () => { currentLbIndex = (currentLbIndex + 1) % allPhotos.length; document.getElementById('lightbox-img').src = allPhotos[currentLbIndex].url; };
+  document.getElementById('lightbox').addEventListener('click', e => { if (e.target === e.currentTarget) closeLb(); });
   document.addEventListener('keydown', e => {
     if (!document.getElementById('lightbox').classList.contains('active')) return;
-    if (e.key==='Escape') closeLb();
-    if (e.key==='ArrowLeft') document.getElementById('lb-prev').click();
-    if (e.key==='ArrowRight') document.getElementById('lb-next').click();
+    if (e.key === 'Escape') closeLb();
+    if (e.key === 'ArrowLeft') document.getElementById('lb-prev').click();
+    if (e.key === 'ArrowRight') document.getElementById('lb-next').click();
   });
 }
 
@@ -190,12 +277,12 @@ function buildCard(photo, index) {
   card.className = 'photo-card';
   card.innerHTML = `
     <div class="card-img-wrap">
-      <img src="${photo.url}" alt="${escHtml(photo.caption||'photo')}" loading="lazy" />
+      <img src="${photo.url}" alt="${esc(photo.caption || 'photo')}" loading="lazy" />
       <div class="img-overlay"><button class="view-btn" onclick="openLb(${index})">🔍 View</button></div>
     </div>
-    ${photo.caption?`<p class="photo-caption">${escHtml(photo.caption)}</p>`:''}
+    ${photo.caption ? `<p class="photo-caption">${esc(photo.caption)}</p>` : ''}
     <div class="card-actions">
-      <button class="d-like-btn" id="d-like-${id}" onclick="dToggleLike('${id}',this)" data-liked="false">
+      <button class="d-like-btn" id="d-like-${id}" onclick="dLike('${id}',this)" data-liked="false">
         <span class="heart">🤍</span>
         <span class="d-like-count" id="d-lcount-${id}">${photo.likes} likes</span>
       </button>
@@ -203,12 +290,12 @@ function buildCard(photo, index) {
     </div>
     <div class="d-comments-section">
       <div class="d-comments-list" id="d-comments-${id}">
-        ${photo.comments.map(c=>`<div class="d-comment-item"><strong>${escHtml(c.name)}</strong>${escHtml(c.message)}</div>`).join('')}
+        ${photo.comments.map(c => `<div class="d-comment-item"><strong>${esc(c.name)}</strong>${esc(c.message)}</div>`).join('')}
       </div>
       <div class="d-comment-form">
         <input type="text" id="d-cname-${id}" placeholder="Your name" maxlength="50" />
         <textarea id="d-cmsg-${id}" rows="2" placeholder="Leave a message..." maxlength="300"></textarea>
-        <button class="d-post-btn" onclick="dPostComment('${id}')">Post ✉️</button>
+        <button class="d-post-btn" onclick="dPost('${id}')">Post ✉️</button>
       </div>
     </div>`;
   return card;
@@ -225,7 +312,7 @@ function closeLb() {
   document.body.style.overflow = '';
 }
 
-async function dToggleLike(id, btn) {
+async function dLike(id, btn) {
   const heart = btn.querySelector('.heart');
   const liked = btn.dataset.liked === 'true';
   btn.dataset.liked = String(!liked);
@@ -238,24 +325,23 @@ async function dToggleLike(id, btn) {
   document.getElementById(`d-lcount-${id}`).textContent = `${data.likes} likes`;
 }
 
-async function dPostComment(id) {
+async function dPost(id) {
   const nameEl = document.getElementById(`d-cname-${id}`);
   const msgEl  = document.getElementById(`d-cmsg-${id}`);
-  const name = nameEl.value.trim();
-  const message = msgEl.value.trim();
-  if (!name||!message) { msgEl.classList.add('shake'); setTimeout(()=>msgEl.classList.remove('shake'),400); return; }
-  const res = await fetch(`/api/photos/${id}/comments`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,message})});
+  const name = nameEl.value.trim(), message = msgEl.value.trim();
+  if (!name || !message) { msgEl.classList.add('shake'); setTimeout(() => msgEl.classList.remove('shake'), 400); return; }
+  const res = await fetch(`/api/photos/${id}/comments`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, message }) });
   if (res.ok) {
     const c = await res.json();
     const list = document.getElementById(`d-comments-${id}`);
     const div = document.createElement('div');
     div.className = 'd-comment-item new';
-    div.innerHTML = `<strong>${escHtml(c.name)}</strong>${escHtml(c.message)}`;
+    div.innerHTML = `<strong>${esc(c.name)}</strong>${esc(c.message)}`;
     list.appendChild(div);
     list.scrollTop = list.scrollHeight;
     nameEl.value = ''; msgEl.value = '';
     const cc = document.getElementById(`d-ccount-${id}`);
-    cc.textContent = parseInt(cc.textContent||0)+1;
+    cc.textContent = parseInt(cc.textContent || 0) + 1;
   }
 }
 

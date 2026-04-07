@@ -4,39 +4,41 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <title>Graduation Gallery</title>
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/gallery.css" />
 </head>
 <body>
 
 <div id="loading-screen">
   <div class="spinner"></div>
-  <p>Loading memories...</p>
 </div>
 
 <div id="hero-splash" style="display:none">
   <div id="confetti"></div>
-  <div class="hero-content">
+  <div class="splash-content">
     <div class="cap-icon">🎓</div>
     <h1 id="grad-name"></h1>
-    <p class="hero-sub">Congratulations on your graduation!</p>
+    <p class="hero-sub">Congratulations!</p>
     <div class="gold-line"></div>
   </div>
 </div>
 
-<!-- MOBILE: full-screen scroll slides -->
+<!-- ── MOBILE ── -->
 <div id="mobile-view">
-  <div id="slides"></div>
-  <div class="scroll-hint" id="scroll-hint">
-    <div class="s-arrow">↓</div>
-    <span>Scroll for more</span>
+  <!-- Top bar -->
+  <div class="ig-topbar">
+    <span class="ig-logo">🎓</span>
+    <span class="ig-username" id="ig-username"></span>
   </div>
+  <!-- Feed -->
+  <div id="ig-feed"></div>
 </div>
 
-<!-- DESKTOP: masonry grid -->
+<!-- ── DESKTOP ── -->
 <div id="desktop-view">
   <header class="d-hero">
     <div class="d-hero-bg"></div>
+    <div id="confetti-d"></div>
     <div class="d-hero-content">
       <div class="cap-icon">🎓</div>
       <h1 id="grad-name-desktop"></h1>
@@ -50,10 +52,26 @@
   <div class="lightbox" id="lightbox">
     <button class="lb-close" id="lb-close">✕</button>
     <button class="lb-nav lb-prev" id="lb-prev">&#8249;</button>
-    <div class="lb-img-wrap"><img id="lightbox-img" src="" alt="Photo" /></div>
+    <div class="lb-img-wrap"><img id="lightbox-img" src="" alt="" /></div>
     <button class="lb-nav lb-next" id="lb-next">&#8250;</button>
   </div>
 </div>
+
+<!-- ── COMMENT SHEET (mobile) ── -->
+<div class="comment-sheet" id="comment-sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-header">
+    <span>Comments</span>
+    <button class="sheet-close" onclick="closeSheet()">✕</button>
+  </div>
+  <div class="sheet-comments" id="sheet-comments"></div>
+  <div class="sheet-input-row">
+    <input type="text" id="sheet-name" placeholder="Your name" />
+    <input type="text" id="sheet-msg" placeholder="Add a comment..." />
+    <button id="sheet-post" onclick="postSheetComment()">Post</button>
+  </div>
+</div>
+<div class="sheet-overlay" id="sheet-overlay" onclick="closeSheet()"></div>
 
 <script src="/gallery.js"></script>
 </body>
