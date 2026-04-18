@@ -244,3 +244,21 @@ body {
   .gallery-grid { grid-template-columns: 1fr; padding: 1rem; }
   .header h1 { font-size: 1.5rem; }
 }
+
+/* ── Gallery category tabs ── */
+.tab-btn {
+  padding: 0.3rem 0.9rem;
+  border: 1px solid #ddd;
+  border-radius: 20px;
+  background: #fff;
+  color: #555;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.tab-btn:hover { border-color: #4a6fa5; color: #4a6fa5; }
+.tab-btn.active { background: #4a6fa5; color: #fff; border-color: #4a6fa5; }
+.tab-btn.active.wedding { background: #c0392b; border-color: #c0392b; }
+
+/* ── Wedding info line under name ── */
+.user-meta { font-size: 0.75rem; color: #888; margin-top: 0.15rem; }

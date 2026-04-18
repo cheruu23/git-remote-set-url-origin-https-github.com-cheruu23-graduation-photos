@@ -57,7 +57,14 @@
 
     <!-- Users List -->
     <div class="card">
-      <h3>Galleries</h3>
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.5rem;margin-bottom:1rem">
+        <h3 style="margin:0">Galleries</h3>
+        <div style="display:flex;gap:0.4rem">
+          <button class="tab-btn active" id="tab-all"        onclick="filterGalleries('all')">All</button>
+          <button class="tab-btn"        id="tab-graduation" onclick="filterGalleries('graduation')">🎓 Graduation</button>
+          <button class="tab-btn"        id="tab-wedding"    onclick="filterGalleries('wedding')">💍 Wedding</button>
+        </div>
+      </div>
       <ul class="user-list" id="user-list">
         <li class="empty">Loading...</li>
       </ul>
@@ -162,26 +169,53 @@
   }
 
   // ── Users ─────────────────────────────────────────────────
+  let allUsers = [];
+  let activeFilter = 'all';
+
   async function loadUsers() {
     const res = await fetch('/api/admin/users');
-    const users = await res.json();
-    const list = document.getElementById('user-list');
+    allUsers = await res.json();
+    renderUsers();
+  }
 
-    if (!users.length) {
-      list.innerHTML = '<li class="empty">No graduates yet. Add one above.</li>';
+  function filterGalleries(type) {
+    activeFilter = type;
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    const btn = document.getElementById('tab-' + type);
+    btn.classList.add('active');
+    if (type === 'wedding') btn.classList.add('wedding');
+    else btn.classList.remove('wedding');
+    renderUsers();
+  }
+
+  function renderUsers() {
+    const list = document.getElementById('user-list');
+    const filtered = activeFilter === 'all'
+      ? allUsers
+      : allUsers.filter(u => (u.type || 'graduation') === activeFilter);
+
+    if (!filtered.length) {
+      list.innerHTML = `<li class="empty">No ${activeFilter === 'all' ? '' : activeFilter + ' '}galleries yet.</li>`;
       return;
     }
 
     list.innerHTML = '';
-    users.forEach(u => {
+    filtered.forEach(u => {
       const li = document.createElement('li');
       li.className = 'user-item';
       const uid = u._id;
-      const badge = u.type === 'wedding'
+      const isWedding = u.type === 'wedding';
+      const badge = isWedding
         ? '<span style="background:#c0392b;color:#fff;font-size:0.7rem;padding:2px 7px;border-radius:10px;margin-left:6px">💍 Wedding</span>'
         : '<span style="background:#2c3e50;color:#fff;font-size:0.7rem;padding:2px 7px;border-radius:10px;margin-left:6px">🎓 Graduation</span>';
+      const meta = isWedding && (u.slogan || u.weddingDate)
+        ? `<div class="user-meta">${u.slogan ? '❝ ' + escHtml(u.slogan) + ' ❞' : ''}${u.slogan && u.weddingDate ? ' · ' : ''}${u.weddingDate ? '📅 ' + u.weddingDate : ''}</div>`
+        : '';
       li.innerHTML = `
-        <span class="user-name">${escHtml(u.name)}${badge}</span>
+        <div style="flex:1;min-width:0">
+          <div>${escHtml(u.name)}${badge}</div>
+          ${meta}
+        </div>
         <div style="display:flex;gap:0.4rem;flex-wrap:wrap">
           <button class="btn btn-sm btn-primary" onclick="openUpload('${uid}', '${escHtml(u.name)}')">📷 Photos</button>
           <button class="btn btn-sm btn-success" onclick="showQR('${uid}', '${escHtml(u.name)}')">📱 QR Code</button>
