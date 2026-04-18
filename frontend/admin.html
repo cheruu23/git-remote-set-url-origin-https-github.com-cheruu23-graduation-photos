@@ -28,7 +28,7 @@
 <!-- Admin Dashboard -->
 <div id="admin-screen" style="display:none">
   <nav class="admin-nav">
-    <h2>🎓 Graduation Admin</h2>
+    <h2>📸 Gallery Admin</h2>
     <button class="btn btn-sm" style="background:#e74c3c;color:white" onclick="doLogout()">Logout</button>
   </nav>
 
@@ -36,17 +36,28 @@
 
     <!-- Add User -->
     <div class="card">
-      <h3>Register Graduate</h3>
+      <h3>Register Gallery</h3>
       <div id="add-user-msg"></div>
-      <div style="display:flex;gap:0.8rem;flex-wrap:wrap">
-        <input type="text" id="new-user-name" placeholder="Graduate's full name" style="flex:1;padding:0.5rem 0.7rem;border:1px solid #ddd;border-radius:6px;font-size:0.95rem" />
-        <button class="btn btn-primary" onclick="addUser()">Add Graduate</button>
+      <div style="display:flex;flex-direction:column;gap:0.7rem">
+        <div style="display:flex;gap:0.8rem;flex-wrap:wrap;align-items:center">
+          <label style="font-size:0.85rem;color:#555;white-space:nowrap">Type:</label>
+          <select id="new-user-type" onchange="toggleWeddingFields()" style="padding:0.5rem 0.7rem;border:1px solid #ddd;border-radius:6px;font-size:0.95rem">
+            <option value="graduation">🎓 Graduation</option>
+            <option value="wedding">💍 Wedding</option>
+          </select>
+        </div>
+        <input type="text" id="new-user-name" placeholder="Name (Graduate's name or Couple's names e.g. Sarah & John)" style="padding:0.5rem 0.7rem;border:1px solid #ddd;border-radius:6px;font-size:0.95rem" />
+        <div id="wedding-fields" style="display:none;flex-direction:column;gap:0.7rem">
+          <input type="text" id="new-user-slogan" placeholder="Slogan / Quote (e.g. Two souls, one heart)" style="padding:0.5rem 0.7rem;border:1px solid #ddd;border-radius:6px;font-size:0.95rem" />
+          <input type="date" id="new-user-date" style="padding:0.5rem 0.7rem;border:1px solid #ddd;border-radius:6px;font-size:0.95rem" />
+        </div>
+        <button class="btn btn-primary" style="align-self:flex-start" onclick="addUser()">Add Gallery</button>
       </div>
     </div>
 
     <!-- Users List -->
     <div class="card">
-      <h3>Graduates</h3>
+      <h3>Galleries</h3>
       <ul class="user-list" id="user-list">
         <li class="empty">Loading...</li>
       </ul>
@@ -166,8 +177,11 @@
       const li = document.createElement('li');
       li.className = 'user-item';
       const uid = u._id;
+      const badge = u.type === 'wedding'
+        ? '<span style="background:#c0392b;color:#fff;font-size:0.7rem;padding:2px 7px;border-radius:10px;margin-left:6px">💍 Wedding</span>'
+        : '<span style="background:#2c3e50;color:#fff;font-size:0.7rem;padding:2px 7px;border-radius:10px;margin-left:6px">🎓 Graduation</span>';
       li.innerHTML = `
-        <span class="user-name">${escHtml(u.name)}</span>
+        <span class="user-name">${escHtml(u.name)}${badge}</span>
         <div style="display:flex;gap:0.4rem;flex-wrap:wrap">
           <button class="btn btn-sm btn-primary" onclick="openUpload('${uid}', '${escHtml(u.name)}')">📷 Photos</button>
           <button class="btn btn-sm btn-success" onclick="showQR('${uid}', '${escHtml(u.name)}')">📱 QR Code</button>
@@ -181,21 +195,32 @@
 
   async function addUser() {
     const name = document.getElementById('new-user-name').value.trim();
+    const type = document.getElementById('new-user-type').value;
+    const slogan = document.getElementById('new-user-slogan')?.value.trim() || '';
+    const weddingDate = document.getElementById('new-user-date')?.value || '';
     if (!name) return showMsg('add-user-msg', 'Please enter a name', 'error');
 
     const res = await fetch('/api/admin/users', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name })
+      body: JSON.stringify({ name, type, slogan, weddingDate })
     });
     if (res.ok) {
       document.getElementById('new-user-name').value = '';
-      showMsg('add-user-msg', 'Graduate added!', 'success');
+      document.getElementById('new-user-slogan').value = '';
+      document.getElementById('new-user-date').value = '';
+      showMsg('add-user-msg', 'Gallery added!', 'success');
       loadUsers();
     } else {
       const err = await res.json();
       showMsg('add-user-msg', err.error, 'error');
     }
+  }
+
+  function toggleWeddingFields() {
+    const type = document.getElementById('new-user-type').value;
+    const wf = document.getElementById('wedding-fields');
+    wf.style.display = type === 'wedding' ? 'flex' : 'none';
   }
 
   async function deleteUser(id) {

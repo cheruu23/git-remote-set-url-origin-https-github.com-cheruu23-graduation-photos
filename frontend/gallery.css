@@ -358,3 +358,147 @@ body { font-family: 'Inter', sans-serif; background: var(--dark); color: var(--t
   .empty-state { text-align: center; padding: 5rem 1rem; color: #555; }
   .empty-state span { font-size: 3rem; display: block; margin-bottom: 1rem; }
 }
+
+
+/* ════════════════════════════════════════════════
+   WEDDING THEME
+   ════════════════════════════════════════════════ */
+:root {
+  --rose:    #c0392b;
+  --rose2:   #e8a0a0;
+  --blush:   #fdf0f0;
+  --cream:   #fff8f0;
+  --wine:    #7b1c2e;
+  --gold-w:  #c9a84c;
+}
+
+/* ── Wedding Splash ── */
+#wedding-splash {
+  position: fixed; inset: 0;
+  background: linear-gradient(160deg, #1a0010, #3d0020, #1a0010);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 200; text-align: center;
+  animation: splashOut 0.5s 3s forwards;
+}
+#petals, #petals-d { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.petal {
+  position: absolute; top: -20px;
+  animation: petalFall linear forwards;
+  user-select: none;
+}
+@keyframes petalFall { to { transform: translateY(110vh) rotate(360deg); opacity: 0; } }
+
+.wedding-splash-content { position: relative; z-index: 2; padding: 2rem; }
+.rings-icon {
+  font-size: 3.5rem; display: block; margin-bottom: 0.7rem;
+  animation: bounceIn 0.7s ease;
+}
+#wedding-splash h1 {
+  font-family: 'Great Vibes', cursive;
+  font-size: clamp(2.2rem, 7vw, 4rem);
+  color: #fff;
+  animation: fadeUp 0.6s 0.3s both;
+  text-shadow: 0 2px 20px rgba(200,100,100,0.5);
+}
+.wedding-slogan {
+  color: var(--rose2);
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  font-size: 1rem;
+  letter-spacing: 0.05em;
+  margin-top: 0.5rem;
+  animation: fadeUp 0.6s 0.5s both;
+}
+.rose-line {
+  width: 0; height: 3px;
+  background: linear-gradient(90deg, var(--rose), var(--rose2));
+  border-radius: 2px; margin: 0.9rem auto 0;
+  animation: expandW 0.5s 0.8s forwards;
+}
+.wedding-date-text {
+  color: var(--rose2);
+  font-size: 0.88rem;
+  letter-spacing: 0.06em;
+  margin-top: 0.6rem;
+  animation: fadeUp 0.6s 1s both;
+}
+
+/* ── Wedding mobile topbar ── */
+.wedding-theme .ig-topbar {
+  background: linear-gradient(135deg, #1a0010, #3d0020);
+  border-bottom-color: #5a1030;
+}
+.wedding-theme .ig-username {
+  font-family: 'Great Vibes', cursive;
+  font-size: 1.3rem;
+  color: var(--rose2);
+}
+.ig-wedding-sub {
+  background: linear-gradient(135deg, #1a0010, #3d0020);
+  padding: 0.4rem 1rem 0.6rem;
+  display: flex; flex-direction: column; gap: 0.2rem;
+  border-bottom: 1px solid #5a1030;
+}
+.ig-wedding-slogan {
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+  color: var(--rose2);
+  font-size: 0.82rem;
+  text-align: center;
+}
+.ig-wedding-date {
+  color: #c9a84c;
+  font-size: 0.78rem;
+  text-align: center;
+  letter-spacing: 0.04em;
+}
+
+/* ── Wedding avatar ── */
+.wedding-avatar {
+  background: linear-gradient(45deg, var(--rose), var(--wine)) !important;
+}
+
+/* ── Wedding post border accent ── */
+.wedding-theme .ig-post {
+  border-bottom-color: #3d0020;
+}
+
+/* ── Wedding desktop hero ── */
+.wedding-hero { min-height: 340px !important; }
+.wedding-hero-bg {
+  background: linear-gradient(135deg, #1a0010, #3d0020, #1a0010) !important;
+}
+.wedding-hero-bg::after {
+  background: radial-gradient(ellipse at 50% 0%, rgba(192,57,43,0.2), transparent 70%) !important;
+}
+.wedding-theme.body, body.wedding-theme {
+  background: #120008 !important;
+}
+.wedding-theme .d-hero-content h1 {
+  font-family: 'Great Vibes', cursive !important;
+  font-size: clamp(2.5rem, 5vw, 4rem) !important;
+  text-shadow: 0 2px 20px rgba(200,100,100,0.4);
+}
+.wedding-theme .hero-sub {
+  color: var(--rose2) !important;
+  font-family: 'Playfair Display', serif;
+  font-style: italic;
+}
+.wedding-theme #d-wedding-date {
+  color: var(--gold-w);
+  font-size: 0.9rem;
+  letter-spacing: 0.06em;
+  margin-top: 0.5rem;
+}
+.wedding-theme .d-post {
+  background: #1a0010 !important;
+  border-color: #3d0020 !important;
+}
+.wedding-theme .d-post-name { color: var(--rose2) !important; }
+.wedding-theme .d-post-form-post { color: var(--rose2) !important; }
+.wedding-theme .d-post-c-name { color: var(--rose2) !important; }
+.wedding-theme .d-post-form input {
+  background: #2a0018 !important;
+  border-color: #5a1030 !important;
+}
+.wedding-theme .d-post-form input:focus { border-color: var(--rose) !important; }

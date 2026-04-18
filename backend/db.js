@@ -17,6 +17,9 @@ const AdminSchema = new mongoose.Schema({
 const UserSchema = new mongoose.Schema({
   name: { type: String, required: true },
   slug: { type: String, unique: true, required: true },
+  type: { type: String, enum: ['graduation', 'wedding'], default: 'graduation' },
+  slogan: { type: String, default: '' },
+  weddingDate: { type: String, default: '' },
   createdAt: { type: Date, default: Date.now }
 });
 

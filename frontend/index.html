@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-  <title>Graduation Gallery</title>
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <title>Gallery</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,400&family=Inter:wght@300;400;500;600&family=Great+Vibes&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/gallery.css" />
 </head>
 <body>
@@ -13,6 +13,7 @@
   <div class="spinner"></div>
 </div>
 
+<!-- GRADUATION splash -->
 <div id="hero-splash" style="display:none">
   <div id="confetti"></div>
   <div class="splash-content">
@@ -23,27 +24,39 @@
   </div>
 </div>
 
+<!-- WEDDING splash -->
+<div id="wedding-splash" style="display:none">
+  <div id="petals"></div>
+  <div class="wedding-splash-content">
+    <div class="rings-icon">💍</div>
+    <h1 id="wedding-name"></h1>
+    <p class="wedding-slogan" id="wedding-slogan-text"></p>
+    <div class="rose-line"></div>
+    <p class="wedding-date-text" id="wedding-date-display"></p>
+  </div>
+</div>
+
 <!-- ── MOBILE ── -->
 <div id="mobile-view">
-  <!-- Top bar -->
   <div class="ig-topbar">
-    <span class="ig-logo">🎓</span>
+    <span class="ig-logo" id="ig-logo">🎓</span>
     <span class="ig-username" id="ig-username"></span>
   </div>
-  <!-- Feed -->
   <div id="ig-feed"></div>
 </div>
 
 <!-- ── DESKTOP ── -->
 <div id="desktop-view">
-  <header class="d-hero">
-    <div class="d-hero-bg"></div>
+  <header class="d-hero" id="d-hero">
+    <div class="d-hero-bg" id="d-hero-bg"></div>
     <div id="confetti-d"></div>
+    <div id="petals-d"></div>
     <div class="d-hero-content">
-      <div class="cap-icon">🎓</div>
+      <div class="cap-icon" id="d-hero-icon">🎓</div>
       <h1 id="grad-name-desktop"></h1>
-      <p class="hero-sub">Congratulations on your graduation!</p>
-      <div class="gold-line"></div>
+      <p class="hero-sub" id="d-hero-sub">Congratulations on your graduation!</p>
+      <div class="gold-line" id="d-hero-line"></div>
+      <p class="wedding-date-text" id="d-wedding-date" style="display:none"></p>
     </div>
   </header>
   <div id="d-feed"></div>

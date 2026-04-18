@@ -4,6 +4,7 @@ let allPhotos = [];
 let currentLbIndex = 0;
 let activeSheetPhotoId = null;
 let lastTap = 0;
+let galleryType = 'graduation'; // 'graduation' | 'wedding'
 
 function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -25,6 +26,28 @@ function spawnConfetti(containerId) {
   }
 }
 
+// ── Rose Petals ───────────────────────────────────────────────
+function spawnPetals(containerId) {
+  const c = document.getElementById(containerId);
+  if (!c) return;
+  const petals = ['🌸','🌹','🌺','💮','🏵️'];
+  for (let i = 0; i < 60; i++) {
+    const el = document.createElement('div');
+    el.className = 'petal';
+    el.textContent = petals[i % petals.length];
+    el.style.cssText = `left:${Math.random()*100}%;font-size:${12+Math.random()*14}px;
+      animation-delay:${Math.random()*3}s;animation-duration:${3+Math.random()*3}s;opacity:0.85`;
+    c.appendChild(el);
+  }
+}
+
+// ── Format wedding date ───────────────────────────────────────
+function formatWeddingDate(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+}
+
 // ── Load ──────────────────────────────────────────────────────
 async function loadGallery() {
   const res = await fetch(`/api/gallery/${slug}`);
@@ -32,18 +55,31 @@ async function loadGallery() {
 
   if (!res.ok) {
     if (isMobile) document.getElementById('ig-feed').innerHTML = '<div class="ig-empty"><span>📭</span><p>Gallery not found.</p></div>';
-    else document.getElementById('gallery-grid').innerHTML = '<div class="empty-state"><span>📭</span><p>Gallery not found.</p></div>';
+    else document.getElementById('d-feed').innerHTML = '<div class="empty-state"><span>📭</span><p>Gallery not found.</p></div>';
     showViews();
     return;
   }
 
   const data = await res.json();
   allPhotos = data.photos;
-  document.title = `${data.user.name} — Graduation`;
+  galleryType = data.user.type || 'graduation';
+  const isWedding = galleryType === 'wedding';
 
-  document.getElementById('grad-name').textContent = data.user.name;
-  document.getElementById('hero-splash').style.display = 'flex';
-  spawnConfetti('confetti');
+  document.title = isWedding ? `${data.user.name} — Wedding` : `${data.user.name} — Graduation`;
+
+  if (isWedding) {
+    // Wedding splash
+    document.getElementById('wedding-name').textContent = data.user.name;
+    document.getElementById('wedding-slogan-text').textContent = data.user.slogan || 'Two souls, one heart';
+    document.getElementById('wedding-date-display').textContent = formatWeddingDate(data.user.weddingDate);
+    document.getElementById('wedding-splash').style.display = 'flex';
+    spawnPetals('petals');
+  } else {
+    // Graduation splash
+    document.getElementById('grad-name').textContent = data.user.name;
+    document.getElementById('hero-splash').style.display = 'flex';
+    spawnConfetti('confetti');
+  }
 
   showViews();
 
@@ -60,7 +96,24 @@ function showViews() {
 //  MOBILE — Instagram style
 // ══════════════════════════════════════════════════════════════
 function buildMobile(data) {
+  const isWedding = galleryType === 'wedding';
   document.getElementById('ig-username').textContent = data.user.name;
+  document.getElementById('ig-logo').textContent = isWedding ? '💍' : '🎓';
+
+  if (isWedding) {
+    document.getElementById('mobile-view').classList.add('wedding-theme');
+    // Wedding sub-header
+    const topbar = document.querySelector('.ig-topbar');
+    if (data.user.slogan || data.user.weddingDate) {
+      const sub = document.createElement('div');
+      sub.className = 'ig-wedding-sub';
+      sub.innerHTML = `
+        ${data.user.slogan ? `<span class="ig-wedding-slogan">${esc(data.user.slogan)}</span>` : ''}
+        ${data.user.weddingDate ? `<span class="ig-wedding-date">📅 ${formatWeddingDate(data.user.weddingDate)}</span>` : ''}
+      `;
+      topbar.insertAdjacentElement('afterend', sub);
+    }
+  }
 
   const feed = document.getElementById('ig-feed');
   if (!data.photos.length) {
@@ -75,13 +128,14 @@ function buildMobile(data) {
 
 function buildPost(photo, index, userName) {
   const id = photo._id;
+  const isWedding = galleryType === 'wedding';
   const post = document.createElement('div');
   post.className = 'ig-post';
   post.style.animationDelay = `${index * 0.06}s`;
 
   post.innerHTML = `
     <div class="ig-post-header">
-      <div class="ig-avatar">🎓</div>
+      <div class="ig-avatar ${isWedding ? 'wedding-avatar' : ''}">${isWedding ? '💍' : '🎓'}</div>
       <div>
         <div class="ig-post-name">${esc(userName)}</div>
         <div class="ig-post-num">Photo ${index + 1} of ${allPhotos.length}</div>
@@ -90,7 +144,7 @@ function buildPost(photo, index, userName) {
 
     <div class="ig-photo-wrap" id="wrap-${id}">
       <img src="${photo.url}" alt="${esc(photo.caption || 'photo')}" loading="${index < 2 ? 'eager' : 'lazy'}" />
-      <div class="dt-heart" id="dt-${id}">❤️</div>
+      <div class="dt-heart" id="dt-${id}">${isWedding ? '❤️' : '❤️'}</div>
     </div>
 
     <div class="ig-actions">
@@ -242,8 +296,25 @@ document.addEventListener('DOMContentLoaded', () => {
 //  DESKTOP — scrollable feed (same as mobile but wider)
 // ══════════════════════════════════════════════════════════════
 function buildDesktop(data) {
+  const isWedding = galleryType === 'wedding';
   document.getElementById('grad-name-desktop').textContent = data.user.name;
-  spawnConfetti('confetti-d');
+
+  if (isWedding) {
+    document.body.classList.add('wedding-theme');
+    document.getElementById('d-hero').classList.add('wedding-hero');
+    document.getElementById('d-hero-bg').classList.add('wedding-hero-bg');
+    document.getElementById('d-hero-icon').textContent = '💍';
+    document.getElementById('d-hero-sub').textContent = data.user.slogan || 'Two souls, one heart';
+    document.getElementById('d-hero-line').classList.add('rose-line');
+    const dateEl = document.getElementById('d-wedding-date');
+    if (data.user.weddingDate) {
+      dateEl.textContent = '📅 ' + formatWeddingDate(data.user.weddingDate);
+      dateEl.style.display = 'block';
+    }
+    spawnPetals('petals-d');
+  } else {
+    spawnConfetti('confetti-d');
+  }
 
   const feed = document.getElementById('d-feed');
   if (!data.photos.length) {
@@ -260,12 +331,13 @@ function buildDesktop(data) {
 
 function buildDPost(photo, index, userName) {
   const id = photo._id;
+  const isWedding = galleryType === 'wedding';
   const post = document.createElement('div');
   post.className = 'd-post';
 
   post.innerHTML = `
     <div class="d-post-header">
-      <div class="d-post-avatar">🎓</div>
+      <div class="d-post-avatar ${isWedding ? 'wedding-avatar' : ''}">${isWedding ? '💍' : '🎓'}</div>
       <div>
         <div class="d-post-name">${esc(userName)}</div>
         <div class="d-post-counter">Photo ${index + 1} of ${allPhotos.length}</div>

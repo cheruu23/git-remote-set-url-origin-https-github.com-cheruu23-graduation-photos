@@ -89,11 +89,11 @@ app.get('/api/admin/users', requireAdmin, async (req, res) => {
 });
 
 app.post('/api/admin/users', requireAdmin, async (req, res) => {
-  const { name } = req.body;
+  const { name, type, slogan, weddingDate } = req.body;
   if (!name) return res.status(400).json({ error: 'Name required' });
   const slug = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') + '-' + Date.now();
   try {
-    const user = await User.create({ name, slug });
+    const user = await User.create({ name, slug, type: type || 'graduation', slogan: slogan || '', weddingDate: weddingDate || '' });
     res.json(user);
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
